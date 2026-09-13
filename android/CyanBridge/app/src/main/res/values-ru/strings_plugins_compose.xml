@@ -30,6 +30,7 @@
     <string name="compose_blacklist_apps">Заблокированные приложения</string>
     <string name="compose_view_screen_captures">Показать снимки экрана</string>
     <string name="compose_daily_processing">Ежедневная обработка</string>
+    <string name="compose_nightly_enrichment_description" formatted="false">Пункты OCR, теги заметок и ежедневные сводки подготавливаются ночью во время зарядки. Обработка начинается при заряде 80% и приостанавливается ниже 75%. Напоминания о проверке появляются только после подготовки непустого пакета.</string>
     <string name="compose_daily_facts_reminder">Напоминание о ежедневных фактах</string>
     <string name="compose_auto_save_daily_facts">Автоматически сохранять ежедневные факты</string>
     <string name="compose_extract_user_fact_candidates">Извлекать кандидатов в факты пользователя</string>

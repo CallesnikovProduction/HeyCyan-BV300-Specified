@@ -30,6 +30,7 @@
     <string name="compose_blacklist_apps">Apps auf Sperrliste</string>
     <string name="compose_view_screen_captures">Bildschirmaufnahmen anzeigen</string>
     <string name="compose_daily_processing">Tägliche Verarbeitung</string>
+    <string name="compose_nightly_enrichment_description" formatted="false">OCR-Stichpunkte, Notiz-Tags und tägliche Zusammenfassungen werden über Nacht während des Ladens vorbereitet. Die Verarbeitung beginnt bei 80 % Akkustand und pausiert unter 75 %. Erinnerungen zur Überprüfung erscheinen erst, wenn ein nicht leerer Stapel bereit ist.</string>
     <string name="compose_daily_facts_reminder">Erinnerung an tägliche Fakten</string>
     <string name="compose_auto_save_daily_facts">Tägliche Fakten automatisch speichern</string>
     <string name="compose_extract_user_fact_candidates">Kandidaten für Nutzerfakten extrahieren</string>

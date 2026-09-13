@@ -16,6 +16,7 @@ import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.ai.AiWakeWordPreferences
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.ui.VersionUpdateChecker
+import com.fersaiyan.cyanbridge.ui.OfficialHeyCyanWarningDialog
 import com.fersaiyan.cyanbridge.localagent.AudioSessionCoordinator
 import com.fersaiyan.cyanbridge.localagent.LocalAgentController
 import com.fersaiyan.cyanbridge.localagent.LocalAgentIntents
@@ -441,6 +442,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         ),
     )
     private var showDownloadFlowPicker by mutableStateOf(false)
+    private var showOfficialHeyCyanWarningDialog by mutableStateOf(false)
     private val deviceNotifyListener by lazy { MyDeviceNotifyListener() }
     private var otaSessionLease: GlassesSessionLease? = null
     private var livePreviewSessionLease: GlassesSessionLease? = null
@@ -678,6 +680,29 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     appearanceSettings = appearance,
                     onNavigateToActivity = ::navigateToDestination,
                 )
+                if (showOfficialHeyCyanWarningDialog) {
+                    OfficialHeyCyanWarningDialog(
+                        onDismissRequest = { showOfficialHeyCyanWarningDialog = false },
+                        onOpenAppInfo = {
+                            showOfficialHeyCyanWarningDialog = false
+                            runCatching { startActivity(OfficialHeyCyanApp.appInfoIntent()) }
+                                .onFailure {
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Could not open HeyCyan App info.",
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                }
+                        },
+                        onSyncAnyway = { suppressFutureWarnings ->
+                            showOfficialHeyCyanWarningDialog = false
+                            if (suppressFutureWarnings) {
+                                OfficialHeyCyanApp.suppressWarning(this@MainActivity)
+                            }
+                            showDownloadFlowPicker()
+                        },
+                    )
+                }
             }
         }
         observeOtaState()
@@ -7549,34 +7574,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             showDownloadFlowPicker()
             return
         }
-
-        val suppressCheckbox = android.widget.CheckBox(this).apply {
-            text = "Don't remind me again"
-            val horizontalPadding = (24 * resources.displayMetrics.density).toInt()
-            setPadding(horizontalPadding, 0, horizontalPadding, 0)
-        }
-        AlertDialog.Builder(this)
-            .setTitle("HeyCyan may interrupt sync")
-            .setMessage(
-                "The official HeyCyan app is installed. Android cannot tell CyanBridge reliably " +
-                    "whether HeyCyan is currently using the glasses. If it is, the two apps may " +
-                    "compete for Bluetooth or Wi-Fi and interrupt media sync.\n\n" +
-                    "For the most reliable sync, open App info, force-stop HeyCyan, then return " +
-                    "to CyanBridge. CyanBridge cannot force-stop another app.",
-            )
-            .setView(suppressCheckbox)
-            .setNegativeButton("Cancel", null)
-            .setNeutralButton("Open App info") { _, _ ->
-                runCatching { startActivity(OfficialHeyCyanApp.appInfoIntent()) }
-                    .onFailure {
-                        Toast.makeText(this, "Could not open HeyCyan App info.", Toast.LENGTH_LONG).show()
-                    }
-            }
-            .setPositiveButton("Continue") { _, _ ->
-                if (suppressCheckbox.isChecked) OfficialHeyCyanApp.suppressWarning(this)
-                showDownloadFlowPicker()
-            }
-            .show()
+        showOfficialHeyCyanWarningDialog = true
     }
 
     private enum class MediaDownloadPurpose {

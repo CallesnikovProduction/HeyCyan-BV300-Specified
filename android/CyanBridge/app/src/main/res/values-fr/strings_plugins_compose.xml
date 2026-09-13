@@ -30,6 +30,7 @@
     <string name="compose_blacklist_apps">Applications bloquees</string>
     <string name="compose_view_screen_captures">Voir les captures d\'ecran</string>
     <string name="compose_daily_processing">Traitement quotidien</string>
+    <string name="compose_nightly_enrichment_description" formatted="false">Les listes à puces OCR, les étiquettes de notes et les résumés quotidiens sont préparés pendant la nuit lors de la recharge. Le traitement commence à 80 % de batterie et s’interrompt sous 75 %. Les rappels de vérification n’apparaissent que lorsqu’un lot non vide est prêt.</string>
     <string name="compose_daily_facts_reminder">Rappel des faits quotidiens</string>
     <string name="compose_auto_save_daily_facts">Enregistrer automatiquement les faits quotidiens</string>
     <string name="compose_extract_user_fact_candidates">Extraire les candidats aux faits utilisateur</string>

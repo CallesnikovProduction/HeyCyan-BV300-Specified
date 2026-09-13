@@ -30,6 +30,7 @@
     <string name="compose_blacklist_apps">앱 차단 목록</string>
     <string name="compose_view_screen_captures">화면 캡처 보기</string>
     <string name="compose_daily_processing">일일 처리</string>
+    <string name="compose_nightly_enrichment_description" formatted="false">OCR 글머리 기호, 메모 태그 및 일일 요약은 충전 중 야간에 준비됩니다. 배터리가 80%일 때 처리를 시작하고 75% 미만이면 일시 중지합니다. 비어 있지 않은 배치가 준비된 후에만 검토 알림이 표시됩니다.</string>
     <string name="compose_daily_facts_reminder">일일 사실 알림</string>
     <string name="compose_auto_save_daily_facts">일일 사실 자동 저장</string>
     <string name="compose_extract_user_fact_candidates">사용자 사실 후보 추출</string>

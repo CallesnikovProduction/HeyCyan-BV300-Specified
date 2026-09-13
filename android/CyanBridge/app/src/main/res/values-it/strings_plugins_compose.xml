@@ -30,6 +30,7 @@
     <string name="compose_blacklist_apps">App bloccate</string>
     <string name="compose_view_screen_captures">Visualizza catture schermo</string>
     <string name="compose_daily_processing">Elaborazione giornaliera</string>
+    <string name="compose_nightly_enrichment_description" formatted="false">Gli elenchi puntati OCR, i tag delle note e i riepiloghi giornalieri vengono preparati durante la notte mentre il dispositivo è in carica. L’elaborazione inizia all’80 % di batteria e si interrompe sotto il 75 %. I promemoria per la revisione vengono visualizzati solo quando è pronto un gruppo non vuoto.</string>
     <string name="compose_daily_facts_reminder">Promemoria fatti giornalieri</string>
     <string name="compose_auto_save_daily_facts">Salva automaticamente i fatti giornalieri</string>
     <string name="compose_extract_user_fact_candidates">Estrai candidati ai fatti utente</string>

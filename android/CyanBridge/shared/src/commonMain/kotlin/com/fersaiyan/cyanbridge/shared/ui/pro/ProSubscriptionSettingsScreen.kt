@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.billing.BillingCatalog
@@ -84,6 +85,10 @@ fun ProSubscriptionSettingsScreen(
     onResetSystemPrompt: () -> Unit,
     onBack: () -> Unit,
     liveEconomy: Boolean = true,
+    liveEconomyLabel: String? = null,
+    livePrivateLabel: String? = null,
+    liveEconomyDescription: String? = null,
+    livePrivateDescription: String? = null,
     onLiveEconomyChange: ((Boolean) -> Unit)? = null,
 ) {
     var showChangePlanDialog by remember { mutableStateOf(false) }
@@ -103,6 +108,7 @@ fun ProSubscriptionSettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .testTag("pro_settings_list")
                 .padding(innerPadding)
                 .consumeWindowInsets(innerPadding),
             contentPadding = PaddingValues(16.dp),
@@ -214,12 +220,16 @@ fun ProSubscriptionSettingsScreen(
                     if (onLiveEconomyChange != null) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(selected = liveEconomy, onClick = { onLiveEconomyChange(true) },
-                                label = { Text(stringResource(Res.string.pro_live_economy)) })
+                                label = { Text(liveEconomyLabel ?: stringResource(Res.string.pro_live_economy)) })
                             FilterChip(selected = !liveEconomy, onClick = { onLiveEconomyChange(false) },
-                                label = { Text(stringResource(Res.string.pro_live_private)) })
+                                label = { Text(livePrivateLabel ?: stringResource(Res.string.pro_live_private)) })
                         }
                         Text(
-                            stringResource(if (liveEconomy) Res.string.pro_live_economy_description else Res.string.pro_live_private_description),
+                            if (liveEconomy) {
+                                liveEconomyDescription ?: stringResource(Res.string.pro_live_economy_description)
+                            } else {
+                                livePrivateDescription ?: stringResource(Res.string.pro_live_private_description)
+                            },
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(stringResource(Res.string.pro_live_mode_scope), style = MaterialTheme.typography.bodySmall)

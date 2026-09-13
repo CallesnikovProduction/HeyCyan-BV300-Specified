@@ -48,6 +48,13 @@ import java.security.MessageDigest
  */
 class ProSubscriptionActivity : AppCompatActivity() {
 
+    private data class EmailCodeDialogRequest(
+        val email: String,
+        val initialMessage: String,
+        val verificationUrl: String?,
+        val onVerified: () -> Unit,
+    )
+
     private lateinit var tvStatus: TextView
     private lateinit var rgPlan: RadioGroup
     private lateinit var rbTrial: RadioButton
@@ -68,6 +75,9 @@ class ProSubscriptionActivity : AppCompatActivity() {
     private var restoreExistingSubscriptionPending = false
     private var restoreNotFoundEmail by mutableStateOf<String?>(null)
     private var restoreLogsSending by mutableStateOf(false)
+    private var emailCodeDialogRequest by mutableStateOf<EmailCodeDialogRequest?>(null)
+    private var emailCodeVerificationInProgress by mutableStateOf(false)
+    private var emailCodeVerificationError by mutableStateOf<String?>(null)
     private var composeState by mutableStateOf(ProSubscriptionUiState())
     private lateinit var composeView: ComposeView
 
@@ -179,6 +189,27 @@ class ProSubscriptionActivity : AppCompatActivity() {
                     onCancelSubscription = { btnUnsubscribe.performClick() },
                     onBack = ::finish,
                 )
+                emailCodeDialogRequest?.let { request ->
+                    EmailVerificationCodeDialog(
+                        email = request.email,
+                        initialMessage = request.initialMessage,
+                        verificationLinkAvailable = request.verificationUrl != null,
+                        verifying = emailCodeVerificationInProgress,
+                        errorMessage = emailCodeVerificationError,
+                        onCodeChanged = { emailCodeVerificationError = null },
+                        onVerify = { code -> verifyAccountEmailCode(request, code) },
+                        onResend = {
+                            emailCodeDialogRequest = null
+                            requestAccountEmailVerification(request.email, request.onVerified)
+                        },
+                        onOpenLink = request.verificationUrl?.let { url ->
+                            { openEmailVerificationLink(url) }
+                        },
+                        onDismissRequest = {
+                            if (!emailCodeVerificationInProgress) emailCodeDialogRequest = null
+                        },
+                    )
+                }
             }
         }
         refreshComposeState()
@@ -624,106 +655,83 @@ class ProSubscriptionActivity : AppCompatActivity() {
         verificationUrl: String? = null,
     ) {
         pendingEmailVerification = email
-        val codeInput = EditText(this).apply {
-            hint = "123456"
-            inputType = InputType.TYPE_CLASS_NUMBER
-            setPadding(48, 32, 48, 32)
-        }
-        val message = buildString {
-            append(initialMessage)
-            append("\n\nWe sent a 6-digit code to ")
-            append(email)
-            append(" (expires in 15 min). Enter it below, or tap the link in your email (link expires in 60 min).")
-            if (verificationUrl != null) append("\n\nTip: in debug builds the link opens directly.")
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Verify your email")
-            .setMessage(message)
-            .setView(codeInput)
-            .setPositiveButton("Verify", null)
-            .setNeutralButton("Resend code", null)
-            .setNegativeButton("Cancel", null)
-            .create()
+        emailCodeVerificationInProgress = false
+        emailCodeVerificationError = null
+        emailCodeDialogRequest = EmailCodeDialogRequest(
+            email = email,
+            initialMessage = initialMessage,
+            verificationUrl = verificationUrl,
+            onVerified = onVerified,
+        )
+    }
 
-        dialog.setOnShowListener {
-            val positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-            val neutral = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
-            val negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
-
-            positive.setOnClickListener {
-                val rawCode = codeInput.text?.toString().orEmpty()
-                if (!rawCode.trim().replace(Regex("[\\s-]"), "").matches(Regex("^[0-9]{6}$"))) {
-                    codeInput.error = "Enter 6 digits"
-                    return@setOnClickListener
-                }
-                positive.isEnabled = false
-                neutral.isEnabled = false
-                Toast.makeText(this, "Verifying code...", Toast.LENGTH_SHORT).show()
-                thread {
-                    val result = ProSubscriptionRelayClient.verifyAccountEmailCode(this, rawCode)
-                    runOnUiThread {
-                        result.onSuccess {
-                            pendingEmailVerification = ""
-                            ProSubscriptionServerPrefs.setVerifiedAccountEmail(this, email)
-                            dialog.dismiss()
-                            // If verification also synced an active subscription, send to settings
-                            thread {
-                                val serverState = ProSubscriptionVerifier.verifyNow(this, strictForTesting = shouldForceStrictVerification())
-                                runOnUiThread {
-                                    if (serverState.active || ProSubscriptionPrefs.isActiveLocally(this)) {
-                                        Toast.makeText(this, "Email verified. Your ${serverState.plan} plan is already active.", Toast.LENGTH_LONG).show()
-                                        maybeRedirectToSettingsIfActive(showToast = false)
-                                        // Fall through to onVerified only if not redirected and not in change-plan mode
-                                        if (!ProSubscriptionPrefs.isActiveLocally(this) || changePlanRequested) onVerified()
-                                    } else {
-                                        Toast.makeText(this, "Email verified. Choose your plan to continue.", Toast.LENGTH_LONG).show()
-                                        onVerified()
-                                    }
+    private fun verifyAccountEmailCode(request: EmailCodeDialogRequest, code: String) {
+        if (emailCodeVerificationInProgress) return
+        emailCodeVerificationInProgress = true
+        emailCodeVerificationError = null
+        Toast.makeText(this, "Verifying code...", Toast.LENGTH_SHORT).show()
+        thread {
+            val result = ProSubscriptionRelayClient.verifyAccountEmailCode(this, code)
+            runOnUiThread {
+                result.onSuccess {
+                    emailCodeVerificationInProgress = false
+                    emailCodeDialogRequest = null
+                    pendingEmailVerification = ""
+                    ProSubscriptionServerPrefs.setVerifiedAccountEmail(this, request.email)
+                    // If verification also synced an active subscription, send to settings.
+                    thread {
+                        val serverState = ProSubscriptionVerifier.verifyNow(
+                            this,
+                            strictForTesting = shouldForceStrictVerification(),
+                        )
+                        runOnUiThread {
+                            if (serverState.active || ProSubscriptionPrefs.isActiveLocally(this)) {
+                                Toast.makeText(
+                                    this,
+                                    "Email verified. Your ${serverState.plan} plan is already active.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                                maybeRedirectToSettingsIfActive(showToast = false)
+                                if (!ProSubscriptionPrefs.isActiveLocally(this) || changePlanRequested) {
+                                    request.onVerified()
                                 }
+                            } else {
+                                Toast.makeText(
+                                    this,
+                                    "Email verified. Choose your plan to continue.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                                request.onVerified()
                             }
-                        }.onFailure { error ->
-                            positive.isEnabled = true
-                            neutral.isEnabled = true
-                            val hint = ProSubscriptionRelayClient.relayUnavailableHint(error)
-                            val msg = hint ?: error.message ?: "Invalid code"
-                            codeInput.error = msg
-                            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
                         }
                     }
-                }
-            }
-
-            neutral.setOnClickListener {
-                dialog.dismiss()
-                requestAccountEmailVerification(email, onVerified)
-            }
-
-            negative.setOnClickListener {
-                dialog.dismiss()
-            }
-
-            // In draft/debug where server returns a direct link, offer it as an extra tap target
-            if (verificationUrl != null) {
-                codeInput.hint = "123456 or tap Open link"
-                neutral.text = "Open link"
-                neutral.setOnClickListener {
-                    dialog.dismiss()
-                    try {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(verificationUrl)))
-                        Toast.makeText(this, "Opened verification link. Return here after confirming.", Toast.LENGTH_LONG).show()
-                    } catch (_: Exception) {
-                        Toast.makeText(this, "Unable to open link. Copy the code from your email.", Toast.LENGTH_LONG).show()
-                    }
-                }
-                // Long-press neutral to resend instead
-                neutral.setOnLongClickListener {
-                    dialog.dismiss()
-                    requestAccountEmailVerification(email, onVerified)
-                    true
+                }.onFailure { error ->
+                    emailCodeVerificationInProgress = false
+                    val hint = ProSubscriptionRelayClient.relayUnavailableHint(error)
+                    val message = hint ?: error.message ?: "Invalid code"
+                    emailCodeVerificationError = message
+                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                 }
             }
         }
-        dialog.show()
+    }
+
+    private fun openEmailVerificationLink(url: String) {
+        emailCodeDialogRequest = null
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            Toast.makeText(
+                this,
+                "Opened verification link. Return here after confirming.",
+                Toast.LENGTH_LONG,
+            ).show()
+        } catch (_: Exception) {
+            Toast.makeText(
+                this,
+                "Unable to open link. Copy the code from your email.",
+                Toast.LENGTH_LONG,
+            ).show()
+        }
     }
 
     private fun confirmAccountEmail(email: String, onConfirmed: () -> Unit) {

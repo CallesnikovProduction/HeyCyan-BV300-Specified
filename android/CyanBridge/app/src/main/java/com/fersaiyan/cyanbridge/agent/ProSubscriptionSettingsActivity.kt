@@ -37,6 +37,7 @@ import kotlin.concurrent.thread
 
 class ProSubscriptionSettingsActivity : AppCompatActivity() {
     private var composeState by mutableStateOf(ProSubscriptionSettingsUiState())
+    private var liveModeOptions by mutableStateOf(ProSubscriptionRelayClient.defaultLiveModes())
     private var syncComposeState: (() -> Unit)? = null
     private lateinit var composeView: ComposeView
 
@@ -449,15 +450,17 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
         fun refreshModels() {
             setButtonBusy(btnRefreshModels, true, "Loading...", "Refresh models")
             thread {
-                val result = ProSubscriptionRelayClient.fetchAvailableModels(this)
+                val result = ProSubscriptionRelayClient.fetchModelCatalog(this)
                 if (!isInForeground) return@thread
                 runSafeOnUiThread {
                     setButtonBusy(btnRefreshModels, false, "Loading...", "Refresh models")
-                    result.onSuccess { models ->
+                    result.onSuccess { catalog ->
+                        val models = catalog.models
                         if (models.isEmpty()) {
                             Toast.makeText(this, "No models returned by server", Toast.LENGTH_SHORT).show()
                             return@onSuccess
                         }
+                        liveModeOptions = catalog.liveModes
 
                         val currentRequests = selectedModel(spinnerModelRequests)
                         val currentQuestions = selectedModel(spinnerModelQuestions)
@@ -613,13 +616,18 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
             }
             val appearance by rememberAppearanceSettings(appearancePreferences)
             CyanBridgeTheme(appearance) {
+                val economyMode = liveModeOptions.first { it.id == "economy" }
+                val privateMode = liveModeOptions.first { it.id == "private" }
                 ProSubscriptionSettingsScreen(
                     liveEconomy = liveEconomy,
-                    onLiveEconomyChange = if (ProSubscriptionPrefs.isActiveLocally(this) &&
-                        ProSubscriptionPrefs.getPlan(this).lowercase() in setOf("cheap", "standard", "max")) { { enabled ->
+                    liveEconomyLabel = economyMode.displayLabel,
+                    livePrivateLabel = privateMode.displayLabel,
+                    liveEconomyDescription = economyMode.description,
+                    livePrivateDescription = privateMode.description,
+                    onLiveEconomyChange = { enabled ->
                         com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.setEconomy(this, enabled)
                         liveEconomy = enabled
-                    } } else null,
+                    },
                     state = composeState,
                     onRefreshPlan = {
                         btnRefreshPlanStatus.performClick()

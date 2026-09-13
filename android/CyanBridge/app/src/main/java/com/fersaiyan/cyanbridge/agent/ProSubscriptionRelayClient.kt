@@ -27,6 +27,25 @@ object ProSubscriptionRelayClient {
         val supportsVision: Boolean = false,
     )
 
+    data class LiveModeOption(
+        val id: String,
+        val label: String,
+        val description: String,
+        val quotaMultiplier: Int,
+    ) {
+        val displayLabel: String
+            get() = if (label.contains(Regex("\\d+\\s*[x×]", RegexOption.IGNORE_CASE))) {
+                label
+            } else {
+                "$label · ${quotaMultiplier}×"
+            }
+    }
+
+    data class ModelCatalog(
+        val models: List<ModelOption>,
+        val liveModes: List<LiveModeOption>,
+    )
+
     data class QuotaInfo(
         val used: Int,
         val limit: Int,
@@ -77,19 +96,26 @@ object ProSubscriptionRelayClient {
     private const val FEEDBACK_PREFS = "pro_feature_feedback"
     private const val KEY_INSTALLATION_ID = "installation_id"
 
-    fun fetchAvailableModels(context: Context): Result<List<ModelOption>> = runCatching {
+    fun fetchModelCatalog(context: Context): Result<ModelCatalog> = runCatching {
         val candidates = listOf("/models", "/v1/models")
         val seen = linkedMapOf<String, ModelOption>()
+        val seenLiveModes = linkedMapOf<String, LiveModeOption>()
 
         for (path in candidates) {
             val parsed = runCatching {
                 val json = requestGetJson(context, endpoint(context, path))
-                parseModels(json)
-            }.getOrDefault(emptyList())
-            parsed.forEach { option ->
+                parseModels(json) to parseLiveModes(json)
+            }.getOrDefault(emptyList<ModelOption>() to emptyList())
+            parsed.first.forEach { option ->
                 val key = option.id.trim().lowercase()
                 if (key.isNotBlank() && !seen.containsKey(key)) {
                     seen[key] = option
+                }
+            }
+            parsed.second.forEach { option ->
+                val key = option.id.trim().lowercase()
+                if (key.isNotBlank() && !seenLiveModes.containsKey(key)) {
+                    seenLiveModes[key] = option
                 }
             }
         }
@@ -97,7 +123,33 @@ object ProSubscriptionRelayClient {
         if (seen.isEmpty()) {
             throw IllegalStateException("No models returned by relay")
         }
-        seen.values.toList()
+        ModelCatalog(
+            models = seen.values.toList(),
+            liveModes = resolveLiveModes(seenLiveModes.values.toList()),
+        )
+    }
+
+    fun fetchAvailableModels(context: Context): Result<List<ModelOption>> =
+        fetchModelCatalog(context).map(ModelCatalog::models)
+
+    internal fun defaultLiveModes(): List<LiveModeOption> = listOf(
+        LiveModeOption(
+            id = "economy",
+            label = "Gemini Live Economy",
+            description = "Lower-cost conversations. Usage costs 7 quota tokens per Gemini token. Google may use conversations to improve its models.",
+            quotaMultiplier = 7,
+        ),
+        LiveModeOption(
+            id = "private",
+            label = "Gemini Live Private",
+            description = "Conversations are not used to train Google's models under its paid API terms. Standard Pro Live usage pricing applies.",
+            quotaMultiplier = 36,
+        ),
+    )
+
+    internal fun resolveLiveModes(serverModes: List<LiveModeOption>): List<LiveModeOption> {
+        val byId = serverModes.associateBy { it.id.trim().lowercase() }
+        return defaultLiveModes().map { fallback -> byId[fallback.id] ?: fallback }
     }
 
     fun fetchQuota(context: Context, model: String): Result<QuotaInfo> = runCatching {
@@ -393,6 +445,32 @@ object ProSubscriptionRelayClient {
         readModelArray(payload.optJSONArray("models"))
         readModelArray(payload.optJSONObject("result")?.optJSONArray("models"))
 
+        return out.values.toList()
+    }
+
+    internal fun parseLiveModes(payload: JSONObject): List<LiveModeOption> {
+        val array = payload.optJSONArray("live_modes")
+            ?: payload.optJSONArray("liveModes")
+            ?: payload.optJSONObject("result")?.optJSONArray("live_modes")
+            ?: return emptyList()
+        val out = linkedMapOf<String, LiveModeOption>()
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            val id = item.optString("id").trim().lowercase()
+            if (id.isBlank() || out.containsKey(id)) continue
+            val label = item.optString("label").trim().ifBlank { id }
+            val description = item.optString("description").trim()
+            val multiplier = intOrNull(item, "quota_multiplier")
+                ?: intOrNull(item, "quotaMultiplier")
+                ?: continue
+            if (multiplier < 1) continue
+            out[id] = LiveModeOption(
+                id = id,
+                label = label,
+                description = description,
+                quotaMultiplier = multiplier,
+            )
+        }
         return out.values.toList()
     }
 

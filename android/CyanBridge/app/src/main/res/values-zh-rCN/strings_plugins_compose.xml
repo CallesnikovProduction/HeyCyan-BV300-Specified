@@ -30,6 +30,7 @@
     <string name="compose_blacklist_apps">应用黑名单</string>
     <string name="compose_view_screen_captures">查看屏幕捕获</string>
     <string name="compose_daily_processing">每日处理</string>
+    <string name="compose_nightly_enrichment_description" formatted="false">设备充电时会在夜间准备 OCR 项目符号、笔记标签和每日摘要。电量达到 80% 时开始处理，低于 75% 时暂停。仅当非空批次准备就绪后才会显示审核提醒。</string>
     <string name="compose_daily_facts_reminder">每日事实提醒</string>
     <string name="compose_auto_save_daily_facts">自动保存每日事实</string>
     <string name="compose_extract_user_fact_candidates">提取用户事实候选</string>

@@ -30,6 +30,7 @@
     <string name="compose_blacklist_apps">Apps bloqueados</string>
     <string name="compose_view_screen_captures">Ver capturas de tela</string>
     <string name="compose_daily_processing">Processamento diario</string>
+    <string name="compose_nightly_enrichment_description" formatted="false">Tópicos de OCR, etiquetas de notas e resumos diários são preparados durante a noite enquanto o dispositivo carrega. O processamento começa com 80% de bateria e pausa abaixo de 75%. Os lembretes de revisão aparecem somente quando um lote não vazio está pronto.</string>
     <string name="compose_daily_facts_reminder">Lembrete de fatos diarios</string>
     <string name="compose_auto_save_daily_facts">Salvar fatos diarios automaticamente</string>
     <string name="compose_extract_user_fact_candidates">Extrair candidatos a fatos do usuario</string>
