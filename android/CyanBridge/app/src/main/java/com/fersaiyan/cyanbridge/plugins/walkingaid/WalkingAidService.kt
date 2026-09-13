@@ -105,8 +105,6 @@ class WalkingAidService : Service() {
             return START_NOT_STICKY
         }
 
-        initializeRuntimeIfNeeded()
-
         if (!DeviceCapabilityHelper.hasCamera(this)) {
             Log.w(TAG, "Stopping WalkingAidService: selected device profile has no camera")
             return rejectStart(startId)
@@ -116,6 +114,7 @@ class WalkingAidService : Service() {
             Log.w(TAG, "Stopping WalkingAidService: model readiness check failed: ${readiness.missingDetails}")
             return rejectStart(startId)
         }
+        initializeRuntimeIfNeeded()
         startLoop()
         return START_STICKY
     }

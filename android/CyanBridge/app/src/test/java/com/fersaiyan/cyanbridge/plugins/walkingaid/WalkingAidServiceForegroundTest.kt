@@ -7,7 +7,6 @@ import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,7 +39,10 @@ class WalkingAidServiceForegroundTest {
         )
 
         val shadowService = shadowOf(service)
-        assertNotNull(shadowService.lastForegroundNotification)
+        assertEquals(
+            WalkingAidNotificationHelper.NOTIFICATION_ID,
+            shadowService.lastForegroundNotificationId,
+        )
         assertTrue(shadowService.isForegroundStopped)
         assertTrue(shadowService.isStoppedBySelf)
         assertEquals(42, shadowService.stopSelfId)
