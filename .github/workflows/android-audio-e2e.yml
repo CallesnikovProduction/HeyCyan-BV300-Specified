@@ -12,6 +12,7 @@ on:
       - android/CyanBridge/app/src/androidTest/assets/audio/**
       - android/CyanBridge/app/src/androidTest/java/com/fersaiyan/cyanbridge/hil/audio/**
       - tools/hil/start_emulator_audio.sh
+      - tools/hil/run_audio_emulator_ci.sh
 
 permissions:
   contents: read
@@ -61,11 +62,4 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim
           disable-animations: true
           # Note: intentionally no -noaudio / -no-audio so AudioRecord + SpeechRecognizer surface.
-          script: |
-            bash -euc '
-              set -o pipefail
-              cd android/CyanBridge
-              ./gradlew --no-daemon --stacktrace -PtestAbi=x86_64 :shared:portabilityTest :app:testDebugUnitTest
-              ./gradlew --no-daemon --stacktrace -PtestAbi=x86_64 :app:connectedDebugAndroidTest \
-                -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest
-            '
+          script: bash tools/hil/run_audio_emulator_ci.sh

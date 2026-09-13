@@ -9,6 +9,7 @@ on:
       - android/CyanBridge/app/src/main/java/com/fersaiyan/cyanbridge/ui/MetaPairingActivity.kt
       - android/CyanBridge/shared/src/commonMain/kotlin/com/fersaiyan/cyanbridge/shared/glasses/MetaPairingIssue.kt
       - android/CyanBridge/app/src/androidTest/**
+      - tools/hil/run_mock_dat_emulator_ci.sh
 
 permissions:
   contents: read
@@ -70,16 +71,7 @@ jobs:
           target: google_apis
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
-          script: |
-            bash -euc '
-              set -o pipefail
-              cd android/CyanBridge
-              # Unit + portability first (fast failure).
-              ./gradlew --no-daemon --stacktrace -PtestAbi=x86_64 :shared:portabilityTest :app:testDebugUnitTest
-              # A single runner argument is required; repeated Gradle properties overwrite each other.
-              ./gradlew --no-daemon --stacktrace -PtestAbi=x86_64 :app:connectedDebugAndroidTest \
-                -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.ui.MetaPairingMockFlowTest,com.fersaiyan.cyanbridge.ui.MetaPairingScreenTest
-            '
+          script: bash tools/hil/run_mock_dat_emulator_ci.sh
         env:
           META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

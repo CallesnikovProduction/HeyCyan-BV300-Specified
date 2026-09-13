@@ -2,6 +2,12 @@ name: Android Tasker HIL
 
 on:
   workflow_dispatch:
+    inputs:
+      require_tasker_hil:
+        description: Fail when no provisioned Tasker and AutoInput target is connected
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -108,23 +114,53 @@ jobs:
           emulator
           com.fersaiyan.cyanbridge.hil.HilFixtureSmokeTest
 
-      - name: Detect core Tasker HIL target
+      - name: Detect provisioned Tasker HIL target
         id: tasker
         shell: bash
         env:
           CYANBRIDGE_HIL_SERIAL: ${{ vars.CYANBRIDGE_HIL_SERIAL || vars.CYANBRIDGE_HIL_PHONE_SERIAL }}
+          REQUIRE_TASKER_HIL: ${{ inputs.require_tasker_hil && 'true' || 'false' }}
         run: |
+          set -euo pipefail
           source tools/hil/common.sh
-          kind=physical
-          serial="$(find_serial physical || true)"
-          if [ -z "$serial" ]; then
-            kind=emulator
-            serial="$(find_serial emulator || true)"
+          candidates=()
+          if [ -n "${CYANBRIDGE_HIL_SERIAL:-}" ]; then
+            candidates+=("$CYANBRIDGE_HIL_SERIAL")
+          else
+            mapfile -t candidates < <(list_serials)
           fi
+
+          serial=""
+          kind=""
+          for desired_kind in physical emulator; do
+            for candidate in "${candidates[@]}"; do
+              if [ "$desired_kind" = physical ] && [[ "$candidate" == emulator-* ]]; then
+                continue
+              fi
+              if [ "$desired_kind" = emulator ] && [[ "$candidate" != emulator-* ]]; then
+                continue
+              fi
+              if ! adb_for "$candidate" get-state >/dev/null 2>&1; then
+                continue
+              fi
+              if package_installed "$candidate" "$TASKER_PACKAGE" && package_installed "$candidate" "$AUTOINPUT_PACKAGE"; then
+                serial="$candidate"
+                kind="$desired_kind"
+                break 2
+              fi
+            done
+          done
+
           if [ -z "$serial" ]; then
-            echo "No Android target is available for required Tasker HIL tests." | tee -a "$GITHUB_STEP_SUMMARY" >&2
-            exit 1
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "Core Tasker HIL skipped: no connected target has both Tasker and AutoInput. Emulator fixture smoke still passed." | tee -a "$GITHUB_STEP_SUMMARY"
+            if [ "$REQUIRE_TASKER_HIL" = true ]; then
+              echo "A provisioned Tasker target was explicitly required for this dispatch." >&2
+              exit 1
+            fi
+            exit 0
           fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
           echo "serial=$serial" >> "$GITHUB_OUTPUT"
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
           echo "Core Tasker HIL target: $serial ($kind)" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -141,21 +177,26 @@ jobs:
           :app:assembleDebugAndroidTest
 
       - name: Core Tasker HIL preflight
+        if: steps.tasker.outputs.available == 'true'
         run: bash tools/hil/preflight.sh '${{ steps.tasker.outputs.serial }}'
 
       - name: Clear integration logcat window
+        if: steps.tasker.outputs.available == 'true'
         run: '$ANDROID_HOME/platform-tools/adb -s "${{ steps.tasker.outputs.serial }}" logcat -c'
 
       - name: Install branch build on core Tasker HIL target
+        if: steps.tasker.outputs.available == 'true'
         run: bash tools/hil/install.sh '${{ steps.tasker.outputs.serial }}'
 
       - name: Sync exact branch Tasker profiles on core target
+        if: steps.tasker.outputs.available == 'true'
         env:
           CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker.outputs.serial }}
         run: bash tools/hil/sync_tasker_profiles.sh '${{ steps.tasker.outputs.serial }}'
 
       - name: Verify or recover core Tasker target after profile import
         id: tasker_ready
+        if: steps.tasker.outputs.available == 'true'
         shell: bash
         env:
           CYANBRIDGE_HIL_EMULATOR_AVD: ${{ vars.CYANBRIDGE_HIL_EMULATOR_AVD || '' }}
@@ -185,6 +226,7 @@ jobs:
           echo "Ready core Tasker target: $serial ($kind)" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Run core Tasker HIL suite
+        if: steps.tasker.outputs.available == 'true'
         env:
           CYANBRIDGE_HIL_SERIAL: ${{ steps.tasker_ready.outputs.serial }}
           CYANBRIDGE_HIL_GLASSES: ${{ steps.tasker_ready.outputs.kind == 'physical' && vars.CYANBRIDGE_HIL_ENABLE_GLASSES || 'false' }}
