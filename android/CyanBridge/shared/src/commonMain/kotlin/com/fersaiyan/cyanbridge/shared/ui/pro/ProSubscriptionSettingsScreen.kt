@@ -83,6 +83,8 @@ fun ProSubscriptionSettingsScreen(
     onSystemPromptChange: (String) -> Unit,
     onResetSystemPrompt: () -> Unit,
     onBack: () -> Unit,
+    liveEconomy: Boolean = false,
+    onLiveEconomyChange: ((Boolean) -> Unit)? = null,
 ) {
     var showChangePlanDialog by remember { mutableStateOf(false) }
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -209,6 +211,19 @@ fun ProSubscriptionSettingsScreen(
             }
             item {
                  ProSettingsCard(stringResource(Res.string.pro_gemini_live_title)) {
+                    if (onLiveEconomyChange != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = liveEconomy, onClick = { onLiveEconomyChange(true) },
+                                label = { Text(stringResource(Res.string.pro_live_economy)) })
+                            FilterChip(selected = !liveEconomy, onClick = { onLiveEconomyChange(false) },
+                                label = { Text(stringResource(Res.string.pro_live_private)) })
+                        }
+                        Text(
+                            stringResource(if (liveEconomy) Res.string.pro_live_economy_description else Res.string.pro_live_private_description),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(stringResource(Res.string.pro_live_mode_scope), style = MaterialTheme.typography.bodySmall)
+                    }
                     Text(
                          stringResource(Res.string.pro_gemini_live_description),
                         style = MaterialTheme.typography.bodySmall,

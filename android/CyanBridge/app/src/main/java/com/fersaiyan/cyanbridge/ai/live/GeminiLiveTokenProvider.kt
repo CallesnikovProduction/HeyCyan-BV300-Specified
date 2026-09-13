@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.ai.live
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import java.time.Instant
@@ -24,6 +23,7 @@ data class LiveTokenConfig(
     val apiKey: String? = null,
     /** Optional setup override retained for provider/test compatibility. */
     val setupJson: String? = null,
+    val economy: Boolean = false,
 )
 
 interface GeminiLiveTokenProvider {
@@ -35,20 +35,21 @@ class DefaultGeminiLiveTokenProvider(
     private val http: OkHttpClient = OkHttpClient(),
 ) : GeminiLiveTokenProvider {
     override suspend fun requestToken(language: String, imagePrompt: String): LiveTokenConfig {
-        val authToken = ProSubscriptionRelayClient.fetchAccountInfo(appContext)
-            .getOrThrow()
-            .apiToken
-            .trim()
+        val account = ProSubscriptionRelayClient.fetchAccountInfo(appContext).getOrThrow()
+        val authToken = account.apiToken.trim()
         check(authToken.isNotBlank()) { "Sign in to CyanBridge before starting Gemini Live" }
         val base = AiProviderPrefs.getRelayBaseUrl(appContext).trim().trimEnd('/')
         check(base.startsWith("https://")) { "Gemini Live requires a secure relay URL" }
-        val paidPlan = ProSubscriptionPrefs.isActiveLocally(appContext) &&
-            ProSubscriptionPrefs.getPlan(appContext).lowercase() in setOf("cheap", "standard", "max")
-        if (!paidPlan) {
+        // Never silently downgrade a paid account to the proxy because local prefs are stale.
+        // The server validates expiry/active status for the selected paid route.
+        val paidPlan = account.plan.lowercase() in setOf("cheap", "standard", "max")
+        val economy = paidPlan && GeminiLiveModePreferences.isEconomy(appContext)
+        if (!paidPlan || economy) {
             val httpUrl = base.toHttpUrl().newBuilder()
                 .addPathSegments("api/pro/live/free")
                 .addQueryParameter("language", language)
                 .addQueryParameter("image_prompt", imagePrompt.take(400))
+                .apply { if (economy) addQueryParameter("mode", "economy") }
                 .build()
                 .toString()
             val websocketUrl = httpUrl.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
@@ -59,6 +60,7 @@ class DefaultGeminiLiveTokenProvider(
                 expiresAtMs = System.currentTimeMillis() + 13 * 60 * 1000L,
                 reservationId = "free-proxy",
                 authorizationHeader = "Bearer $authToken",
+                economy = economy,
             )
         }
         val body = JSONObject()

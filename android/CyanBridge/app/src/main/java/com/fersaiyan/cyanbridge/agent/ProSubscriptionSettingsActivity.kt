@@ -608,9 +608,18 @@ class ProSubscriptionSettingsActivity : AppCompatActivity() {
 
         val appearancePreferences = AppearancePreferences(this)
         composeView.setContent {
+            var liveEconomy by androidx.compose.runtime.remember {
+                mutableStateOf(com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.isEconomy(this))
+            }
             val appearance by rememberAppearanceSettings(appearancePreferences)
             CyanBridgeTheme(appearance) {
                 ProSubscriptionSettingsScreen(
+                    liveEconomy = liveEconomy,
+                    onLiveEconomyChange = if (ProSubscriptionPrefs.isActiveLocally(this) &&
+                        ProSubscriptionPrefs.getPlan(this).lowercase() in setOf("cheap", "standard", "max")) { { enabled ->
+                        com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.setEconomy(this, enabled)
+                        liveEconomy = enabled
+                    } } else null,
                     state = composeState,
                     onRefreshPlan = {
                         btnRefreshPlanStatus.performClick()

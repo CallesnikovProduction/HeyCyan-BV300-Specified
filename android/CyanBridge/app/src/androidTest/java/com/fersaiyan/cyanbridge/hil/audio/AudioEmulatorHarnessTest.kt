@@ -208,25 +208,36 @@ class AudioEmulatorHarnessTest {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val apiToken = ProSubscriptionServerPrefs.getApiToken(ctx).trim()
         assumeTrue("No Pro API token linked — run Pro email verification first", apiToken.isNotBlank())
+        val entitlement = com.fersaiyan.cyanbridge.agent.ProSubscriptionVerifier.verifyNow(ctx, strictForTesting = true)
+        assertTrue("An active paid plan is required: ${entitlement.plan}",
+            entitlement.active && entitlement.plan in setOf("cheap", "standard", "max"))
 
         val latch = CountDownLatch(1)
         val outputText = AtomicReference<String>("")
         val errorText = AtomicReference<String>("")
-        var observedListening = false
+        val listening = CountDownLatch(1)
+        val mode = InstrumentationRegistry.getArguments().getString("proLiveMode") ?: "private"
+        require(mode in setOf("private", "economy")) { "proLiveMode must be private or economy" }
+        val previousEconomy = com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.isEconomy(ctx)
+        com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.setEconomy(ctx, mode == "economy")
 
         val client = GeminiLiveClient(
             context = ctx,
             listener = object : GeminiLiveClient.Listener {
                 override fun onStateChanged(state: GeminiLiveState, detail: String) {
-                    if (state == GeminiLiveState.LISTENING) observedListening = true
-                    if (state == GeminiLiveState.ERROR) errorText.set(detail)
+                    if (state == GeminiLiveState.LISTENING) listening.countDown()
+                    if (state == GeminiLiveState.ERROR) {
+                        errorText.set(detail)
+                        listening.countDown()
+                        latch.countDown()
+                    }
                 }
                 override fun onInterrupted() = Unit
                 override fun onNetworkChanged(available: Boolean) = Unit
                 override fun onTranscription(input: Boolean, text: String) {
-                    if (!input && text.contains("I like red flowers", ignoreCase = true)) {
-                        outputText.set(text)
-                        latch.countDown()
+                    if (!input) {
+                        val accumulated = outputText.updateAndGet { it + text }
+                        if (accumulated.contains("I like red flowers", ignoreCase = true)) latch.countDown()
                     }
                 }
             },
@@ -237,22 +248,27 @@ class AudioEmulatorHarnessTest {
             // Deterministic check: model should echo "I like red flowers" when we stream the gemini fixture PCM.
             client.start(language = "en-US", imagePrompt = "You are a test assistant. Reply with exactly: I like red flowers")
             // Give token + WS time (up to 15s) — gated test, not hermetic.
-            var waited = 0
-            while (waited < 15_000 && !observedListening && errorText.get().isNullOrBlank()) {
-                Thread.sleep(300)
-                waited += 300
-            }
-            assumeTrue("Gemini Live never reached LISTENING (token/network?): ${errorText.get()}", observedListening)
+            assertTrue("Gemini Live setup timed out", listening.await(60, TimeUnit.SECONDS))
+            assertTrue("Gemini Live setup failed: ${errorText.get()}", errorText.get().isBlank())
 
             // Inject deterministic PCM after LISTENING (mirrors GlassesDailyGemini vision+audio injection via offerGlassesPcm)
             val pcmShorts = TestAudioAssets.wavToPcm16Shorts(TestAudioAssets.readWavBytes(TestAudioAssets.GEMINI_WAV))
-            client.offerGlassesPcm(pcmShorts, 16_000)
+            // Real-time 40 ms packets avoid oversized messages and exercise server VAD.
+            for (offset in pcmShorts.indices step 640) {
+                client.offerGlassesPcm(pcmShorts.copyOfRange(offset, minOf(offset + 640, pcmShorts.size)), 16_000)
+                Thread.sleep(40)
+            }
+            repeat(25) {
+                client.offerGlassesPcm(ShortArray(640), 16_000)
+                Thread.sleep(40)
+            }
 
             val heard = latch.await(45, TimeUnit.SECONDS)
             assertTrue("Gemini Live did not transcribe/output 'I like red flowers' within 45s. error=${errorText.get()} output=${outputText.get()}", heard)
             assertTrue(outputText.get().contains("I like red flowers", ignoreCase = true))
         } finally {
             client.close()
+            com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.setEconomy(ctx, previousEconomy)
         }
     }
 }

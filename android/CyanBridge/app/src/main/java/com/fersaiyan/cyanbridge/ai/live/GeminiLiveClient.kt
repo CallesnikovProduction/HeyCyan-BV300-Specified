@@ -398,6 +398,12 @@ class GeminiLiveClient(
                 handleServerMessage(text)
             }
 
+            override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+                // Google's direct endpoint can send UTF-8 JSON in binary frames.
+                // The free proxy converts these to text, which hid this missing callback.
+                handleServerMessage(bytes.utf8())
+            }
+
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 Log.w(TAG, "Gemini Live socket closing code=$code reason=$reason")
                 webSocket.close(code, reason)
@@ -430,6 +436,15 @@ class GeminiLiveClient(
                 if (socket === webSocket) socket = null
                 setupComplete.set(false)
                 Log.w(TAG, "Gemini Live socket failed code=${response?.code} msg=${response?.message} err=${t.message}", t)
+                if (config.economy && response != null && response.code in 400..499) {
+                    stop()
+                    setState(GeminiLiveState.ERROR, when (response.code) {
+                        402 -> "Live quota exhausted. Please wait for quota reset or upgrade."
+                        429 -> "Live is busy or another session is active. Please try again shortly."
+                        else -> "Unable to start Economy Live. Check your Pro subscription and try again."
+                    })
+                    return
+                }
                 // Free queue: only the CyanBridge free proxy returns localized live_free_queued.
                 if (response?.code == 429 && config.reservationId == "free-proxy") {
                     val raw = try { response.body?.string().orEmpty() } catch (_: Exception) { "" }
@@ -562,6 +577,14 @@ class GeminiLiveClient(
         Log.d(TAG, "Live server message raw=${raw.take(2000)}")
         val message = runCatching { JSONObject(raw) }.getOrElse {
             Log.w(TAG, "Ignoring malformed Gemini Live message raw=${raw.take(500)}")
+            return
+        }
+        message.optJSONObject("error")?.let { error ->
+            stop()
+            val detail = if (error.optString("message") == "live_quota_exhausted")
+                "Live quota exhausted. Please wait for quota reset or upgrade."
+            else "Gemini Live session failed. Please try again."
+            setState(GeminiLiveState.ERROR, detail)
             return
         }
 

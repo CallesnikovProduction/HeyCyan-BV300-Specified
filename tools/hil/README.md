@@ -6,6 +6,33 @@ self-hosted Linux runner; Jenkins is not required.
 
 ## Device roles
 
+### Pro Gemini Live audio smoke test
+
+The persistent emulator can use its normally verified Pro account across runs.
+Install the current debug and androidTest APKs first. One-time setup uses
+`ProAccountSetupHilTest#requestVerification` with instrumentation argument
+`proEmail`, followed by `#verifyAccount` with `proCode` from the real email.
+These call the production account APIs; they do not fabricate subscriptions.
+Do not store the code or account token in source or CI artifacts.
+
+After verification, run explicitly (consumes paid Live quota):
+
+```bash
+bash tools/hil/run_pro_live_audio.sh emulator-5554
+# After deploying the Economy billing backend:
+bash tools/hil/run_pro_live_audio.sh emulator-5554 economy
+```
+
+The test refreshes server entitlement and requires an active paid plan, selects
+the requested mode (Private by default; the prior preference is restored), waits
+for Live setup, streams the existing `gemini_live_hello_5s.wav` in 40 ms PCM
+packets plus a silence tail, and checks accumulated output transcription for
+`I like red flowers`. Setup errors fail rather than skip. The runner also
+rejects JUnit skips/failures even if ADB exits zero. This exercises the Live
+client/network and PCM input path, not physical Bluetooth capture or the
+foreground service's lock-screen lifecycle. Keep it opt-in on the persistent
+runner; a fresh CI emulator must complete normal account verification first.
+
 The workflow intentionally treats the lab as two different kinds of instruments:
 
 - **Persistent licensed automation emulator**: Tasker, AutoInput/AutoApps entitlement, Google account, Chrome, Gmail, and optionally a CyanBridge local model or Pro Subscription configuration. AI/browser/email automation HIL is pinned here even after a physical phone is connected.
