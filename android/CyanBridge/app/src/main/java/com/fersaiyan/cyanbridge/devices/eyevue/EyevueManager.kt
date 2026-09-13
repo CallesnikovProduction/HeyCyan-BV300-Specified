@@ -191,7 +191,9 @@ class EyevueManager private constructor(context: Context) {
 
     suspend fun awaitWifiSsid(p2p: Boolean, timeoutMs: Long = 15_000L): String? {
         _state.value = _state.value.copy(wifiSsid = null)
-        requestWifiInfo(p2p)
+        if (!sendNow(EyevueProtocol.buildGetWifiInfoPacket(p2p), "start media Wi-Fi")) {
+            throw IOException("Could not request the Eyevue media Wi-Fi network")
+        }
         return withTimeoutOrNull(timeoutMs) {
             state
                 .filter { !it.wifiSsid.isNullOrBlank() }

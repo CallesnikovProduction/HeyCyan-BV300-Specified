@@ -295,8 +295,7 @@ class EyevueWifiTransport(
         val target = p2pTargetSsid?.trim().orEmpty()
         if (target.isBlank()) return null
         peers.deviceList.firstOrNull { peer ->
-            peer.deviceName?.contains(target, ignoreCase = true) == true ||
-                target.contains(peer.deviceName.orEmpty(), ignoreCase = true)
+            matchesEyevuePeerName(target, peer.deviceName)
         }?.let { return it }
 
         // The BLE-reported SSID and WifiP2pDevice.deviceName are separate vendor fields and

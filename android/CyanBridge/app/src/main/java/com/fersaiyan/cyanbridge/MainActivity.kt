@@ -4981,8 +4981,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     ).show()
                 }
             } finally {
-                withContext(Dispatchers.IO) {
-                    runCatching { manager.finishTransfer() }
+                withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
+                    runCatching { manager.finishTransferBlocking() }
                     runCatching { hotspot?.stop() }
                     tempDir?.let { runCatching { it.deleteRecursively() } }
                 }
@@ -7810,7 +7810,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     },
                 )
             } finally {
-                withContext(Dispatchers.Main) {
+                withContext(Dispatchers.Main + kotlinx.coroutines.NonCancellable) {
                     val completed = result?.getOrNull()
                     val cancelled = tuneBudsMediaCancelled
                     tuneBudsMediaJob = null
@@ -7834,12 +7834,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun stopTuneBudsMediaSync() {
         if (tuneBudsMediaJob?.isActive != true) return
         tuneBudsMediaCancelled = true
-        tuneBudsMediaHotspot?.stop()
-        getOrCreateTuneBudsManager().finishTransfer()
+        // The sync job owns cancellation-safe camera/hotspot cleanup and its lease.
         tuneBudsMediaJob?.cancel()
         setTransferUiVisible(false)
-        releaseExclusiveGlassesSession(mediaSessionLease)
-        mediaSessionLease = null
     }
 
     private fun startMoyoungW620MediaSync() {

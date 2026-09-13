@@ -64,6 +64,7 @@ object TuneBudsProtocol {
     const val CMD_START_AUDIO = 0xE5
     const val CMD_CONFIGURE_WIFI = 0xE6
     const val CMD_FILE_MANAGER = 0xE7
+    const val CMD_WIFI_STATE = 0xEC
     const val CMD_START_RTSP = 0xE8
     const val CMD_COPROCESSOR_VERSION = 0xE9
     const val CMD_STORAGE = 0xEA

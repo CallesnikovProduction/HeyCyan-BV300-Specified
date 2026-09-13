@@ -203,9 +203,16 @@ class TuneBudsMediaSync(
             onState(state.copy(detail = "Failed", lastError = error.message ?: error.javaClass.simpleName))
             return Result.failure(error)
         } finally {
-            manager.finishTransfer()
-            hotspot.stop()
-            temporaryDirectory.deleteRecursively()
+            withContext(kotlinx.coroutines.NonCancellable) {
+                try {
+                    manager.finishTransferBlocking()
+                } catch (error: Exception) {
+                    android.util.Log.w("TuneBudsMediaSync", "Camera cleanup failed", error)
+                } finally {
+                    hotspot.stop()
+                    temporaryDirectory.deleteRecursively()
+                }
+            }
         }
     }
 

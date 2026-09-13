@@ -58,6 +58,7 @@ data class TuneBudsState(
     val storage: TuneBudsStorageInfo? = null,
     val mediaCounts: TuneBudsMediaCounts? = null,
     val mediaBaseUrl: String? = null,
+    val wifiState: Int? = null,
     val workState: Int? = null,
     val isVideoRecording: Boolean = false,
     val isAudioRecording: Boolean = false,
@@ -268,7 +269,12 @@ class TuneBudsManager private constructor(context: Context) {
         timeoutMs: Long = 30_000L,
     ): String? = coroutineScope {
         if (!client.isConnected()) return@coroutineScope null
-        _state.value = _state.value.copy(mediaBaseUrl = null)
+        _state.value = _state.value.copy(mediaBaseUrl = null, wifiState = null)
+        // Register before configuration so an immediate failure cannot be missed.
+        val wifiFailure = launch(start = CoroutineStart.UNDISPATCHED) {
+            val failed = state.first { it.wifiState in setOf(0, 4, 5) }
+            throw IOException("TuneBuds Wi-Fi connection failed (state ${failed.wifiState})")
+        }
         val endpoint = async(start = CoroutineStart.UNDISPATCHED) {
             state.filter { !it.mediaBaseUrl.isNullOrBlank() }.first().mediaBaseUrl
         }
@@ -289,7 +295,7 @@ class TuneBudsManager private constructor(context: Context) {
                 val response = request(TuneBudsProtocol.CMD_FILE_MANAGER)
                 when (val status = TuneBudsProtocol.parseStatus(response.payload)) {
                     0 -> break
-                    1, 3 -> {
+                    1, 3, 5 -> {
                         if (fileManagerAttempt >= FILE_MANAGER_MAX_ATTEMPTS) {
                             throw IOException("TuneBuds file manager remained busy for ${FILE_MANAGER_MAX_ATTEMPTS}s")
                         }
@@ -303,11 +309,16 @@ class TuneBudsManager private constructor(context: Context) {
             }
             withTimeoutOrNull(timeoutMs) { endpoint.await() }
         } finally {
+            wifiFailure.cancel()
             endpoint.cancel()
         }
     }
 
     fun finishTransfer() = launchCommand("close camera subsystem") {
+        stopCameraSubsystem()
+    }
+
+    suspend fun finishTransferBlocking() {
         stopCameraSubsystem()
     }
 
@@ -435,6 +446,11 @@ class TuneBudsManager private constructor(context: Context) {
 
     private fun handleFrame(frame: TuneBudsFrame) {
         when (frame.command) {
+            TuneBudsProtocol.CMD_WIFI_STATE -> if (frame.type == TuneBudsFrameType.NOTIFICATION) {
+                TuneBudsProtocol.parseStatus(frame.payload)?.let { value ->
+                    _state.value = _state.value.copy(wifiState = value)
+                }
+            }
             TuneBudsProtocol.CMD_DEVICE_INFO -> if (frame.type == TuneBudsFrameType.RESPONSE) {
                 runCatching { TuneBudsProtocol.parseDeviceInfo(frame.payload) }
                     .onSuccess(::applyDeviceInfo)

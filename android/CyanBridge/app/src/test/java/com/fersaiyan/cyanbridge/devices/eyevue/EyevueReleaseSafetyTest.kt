@@ -20,8 +20,8 @@ class EyevueReleaseSafetyTest {
 
     @Test
     fun eyevueMediaSyncUsesVerifiedWifiActivationCommand() {
-        assertTrue(mediaSource.contains("manager.startLiveAndAwaitSsid"))
-        assertFalse(mediaSource.contains("manager.awaitWifiSsid("))
+        assertTrue(mediaSource.contains("manager.awaitWifiSsid("))
+        assertFalse(mediaSource.contains("manager.startLiveAndAwaitSsid"))
         assertTrue(mediaSource.contains("manager.stopLiveBlocking()"))
     }
 

@@ -7,10 +7,15 @@ Date: 2026-07-29
 - Package: `com.eyevue.glassapp`
 - Version: `1.0.68-c` (`versionCode=68`)
 - SHA-256: `4df9bbc406cf8d763a46eea8bb05ca6068b72e2523f2a5467d52cee1ddd90cfb`
-- JADX output: `/tmp/opencode/eyevue-jadx`
+- Preserved JADX output: `android/eyevue-jadx` (original temporary path: `/tmp/opencode/eyevue-jadx`).
 - JADX version: `1.5.6`
 
 ## Important Scope Finding
+
+Media import is a separate flow: the vendor `defpackage/qfc.java`
+`connectP2pWifitoReceivePhoto()` sends `getWifiInfo` (`0x39`), not the
+live-preview command `0x67`. Do not infer media-start commands from this
+livestream document. See `DATA_SYNC_COMMAND_AUDIT_20260909.md` for the audit.
 
 The APK does not implement TikTok/Douyin publishing. No TikTok package, intent, SDK call, RTMP publisher, or app-owned MediaProjection path was found.
 

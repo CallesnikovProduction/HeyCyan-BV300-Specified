@@ -107,11 +107,9 @@ class EyevueMediaSync(
         onState(state)
         temporaryDirectory.mkdirs()
         try {
-            // The reverse-engineered vendor flow activates the glasses Wi-Fi with CMD_APP_LIVE
-            // (0x67, AP=0x30 / P2P=0x31) and then receives the SSID in command 0x25.
-            // The vendor notes do not document CMD_GET_WIFI_INFO (0x39) as the network
-            // activation step, so media sync must not rely on that query alone.
-            val ssid = manager.startLiveAndAwaitSsid(ap = profile.mode == EyevueWifiMode.AP)
+            // Vendor qfc.connectP2pWifitoReceivePhoto uses 0x39 for media import.
+            // 0x67 belongs to live preview; both return the SSID through 0x25.
+            val ssid = manager.awaitWifiSsid(p2p = profile.mode == EyevueWifiMode.P2P)
                 ?: throw IOException("Eyevue did not report a Wi-Fi SSID after starting Wi-Fi mode")
             state = state.copy(detail = "Connecting to ${profile.mode.name} Wi-Fi")
             onState(state)
