@@ -353,6 +353,7 @@ class GeminiLiveClient(
         val config = tokenConfig ?: return
         if (System.currentTimeMillis() >= config.expiresAtMs) {
             active.set(false)
+            listener.onAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
             setState(GeminiLiveState.ERROR, "Live session expired. Start a new session.")
             return
         }

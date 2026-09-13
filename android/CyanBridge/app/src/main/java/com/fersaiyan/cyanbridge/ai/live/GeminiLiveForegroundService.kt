@@ -166,6 +166,9 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         idleStopJob = serviceScope.launch {
             delay(MAX_WORK_DURATION_MS)
             Log.w(TAG, "Live max duration reached, stopping")
+            terminalAnnouncementIssued = true
+            speakAnnouncement(GeminiLiveAnnouncement.SESSION_ENDED)
+            delay(6_000L)
             stopLive()
         }
     }
@@ -361,6 +364,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         serviceScope.launch(Dispatchers.Main) {
             if (kind in setOf(
                     GeminiLiveAnnouncement.IMAGE_LIMIT_REACHED,
+                    GeminiLiveAnnouncement.SESSION_ENDED,
                     GeminiLiveAnnouncement.FREE_DAILY_LIMIT_REACHED,
                     GeminiLiveAnnouncement.FREE_BUSY,
                     GeminiLiveAnnouncement.GENERIC_FAILURE,

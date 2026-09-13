@@ -21,6 +21,14 @@ class GeminiLiveAnnouncementTest {
     }
 
     @Test
+    fun `terminal session message says trigger rather than say`() {
+        assertEquals(
+            "Your Live session has ended. Trigger Live again to start a new one.",
+            GeminiLiveAnnouncementMessages.text(GeminiLiveAnnouncement.SESSION_ENDED, "en"),
+        )
+    }
+
+    @Test
     fun `unsupported languages fall back to English`() {
         assertEquals(
             "Live is busy. Please try again in a moment.",

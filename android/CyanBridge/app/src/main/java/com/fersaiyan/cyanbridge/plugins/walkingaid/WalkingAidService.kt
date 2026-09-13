@@ -73,39 +73,50 @@ class WalkingAidService : Service() {
 
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var runtimeInitialized = false
     private var safetyDisclaimerSpoken = false
     private var wasAutoAudioEnabled = false
 
     override fun onCreate() {
         super.onCreate()
         WalkingAidNotificationHelper.ensureChannel(this)
-        WalkingAidImageStore.load(this)
-        WalkingAidWarningEngine.reset()
-        initTts()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val action = intent?.action
+        if (action == ACTION_STOP) {
+            stopLoop(reason = "user")
+            return START_NOT_STICKY
+        }
+
+        val shouldStart = action == ACTION_START ||
+            (action == null && WalkingAidPreferences.isEnabled(this))
+        if (!shouldStart) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
+        // A service launched with startForegroundService() must promote itself before
+        // any model, history, TTS, device, or readiness initialization can block.
+        if (!startForegroundSafely("Walking Aid is starting...")) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+
+        initializeRuntimeIfNeeded()
+
         if (!DeviceCapabilityHelper.hasCamera(this)) {
             Log.w(TAG, "Stopping WalkingAidService: selected device profile has no camera")
-            stopSelf()
-            return START_NOT_STICKY
+            return rejectStart(startId)
         }
         val readiness = WalkingAidReadinessChecker.checkReadiness(this)
         if (!readiness.isReady) {
             Log.w(TAG, "Stopping WalkingAidService: model readiness check failed: ${readiness.missingDetails}")
-            stopSelf()
-            return START_NOT_STICKY
+            return rejectStart(startId)
         }
-        val action = intent?.action
-        when (action) {
-            ACTION_START -> startLoop()
-            ACTION_STOP -> stopLoop(reason = "user")
-            null -> {
-                if (WalkingAidPreferences.isEnabled(this)) startLoop() else stopSelf()
-            }
-        }
+        startLoop()
         return START_STICKY
     }
 
@@ -121,6 +132,20 @@ class WalkingAidService : Service() {
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
         }
+    }
+
+    private fun initializeRuntimeIfNeeded() {
+        if (runtimeInitialized) return
+        WalkingAidImageStore.load(this)
+        WalkingAidWarningEngine.reset()
+        initTts()
+        runtimeInitialized = true
+    }
+
+    private fun rejectStart(startId: Int): Int {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf(startId)
+        return START_NOT_STICKY
     }
 
     private fun canPostNotifications(): Boolean {
@@ -157,12 +182,11 @@ class WalkingAidService : Service() {
             return
         }
         val isMetaRayban = isMetaRaybanSelected()
-
-        if (!startForegroundSafely("Walking Aid active — starting LiteRT Vision Engine...")) {
-            RUNNING.set(false)
-            stopSelf()
-            return
-        }
+        WalkingAidNotificationHelper.updateNotification(
+            this,
+            "Walking Aid active — starting LiteRT Vision Engine...",
+            WalkingAidPreferences.getCaptureIntervalSeconds(this),
+        )
 
         if (!isMetaRayban && !BleOperateManager.getInstance().isConnected) {
             Log.w(TAG, "Glasses not connected")
