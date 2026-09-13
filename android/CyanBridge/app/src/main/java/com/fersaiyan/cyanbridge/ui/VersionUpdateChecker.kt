@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.ui
 
 import android.app.Activity
-import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -9,6 +8,7 @@ import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.ComponentDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -124,7 +124,9 @@ object VersionUpdateChecker {
         }
 
         val prefs = context.getSharedPreferences("version_check", Context.MODE_PRIVATE)
-        val dialog = Dialog(activity)
+        // Compose requires lifecycle, saved-state, and back-press owners on the
+        // dialog's decor view. A platform Dialog does not install those owners.
+        val dialog = ComponentDialog(activity)
         dialog.setContentView(
             ComposeView(activity).apply {
                 setContent {
