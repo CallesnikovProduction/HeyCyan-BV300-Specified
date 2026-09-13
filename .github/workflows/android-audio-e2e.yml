@@ -62,8 +62,10 @@ jobs:
           disable-animations: true
           # Note: intentionally no -noaudio / -no-audio so AudioRecord + SpeechRecognizer surface.
           script: |
-            set -euo pipefail
-            cd android/CyanBridge
-            ./gradlew --no-daemon --stacktrace :shared:portabilityTest :app:testDebugUnitTest
-            ./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest \
-              -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest
+            bash -euc '
+              set -o pipefail
+              cd android/CyanBridge
+              ./gradlew --no-daemon --stacktrace -PtestAbi=x86_64 :shared:portabilityTest :app:testDebugUnitTest
+              ./gradlew --no-daemon --stacktrace -PtestAbi=x86_64 :app:connectedDebugAndroidTest \
+                -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest
+            '

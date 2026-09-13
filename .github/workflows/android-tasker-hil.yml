@@ -73,6 +73,7 @@ jobs:
         working-directory: android/CyanBridge
         run: >-
           ./gradlew --no-daemon --stacktrace
+          -PtestAbi=x86_64
           :app:assembleDebug
           :app:assembleDebugAndroidTest
 
@@ -127,6 +128,17 @@ jobs:
           echo "serial=$serial" >> "$GITHUB_OUTPUT"
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
           echo "Core Tasker HIL target: $serial ($kind)" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Rebuild universal APKs for physical Tasker target
+        if: steps.tasker.outputs.kind == 'physical'
+        env:
+          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+        working-directory: android/CyanBridge
+        run: >-
+          ./gradlew --no-daemon --stacktrace
+          :app:clean
+          :app:assembleDebug
+          :app:assembleDebugAndroidTest
 
       - name: Core Tasker HIL preflight
         run: bash tools/hil/preflight.sh '${{ steps.tasker.outputs.serial }}'
@@ -189,10 +201,20 @@ jobs:
         shell: bash
         env:
           CYANBRIDGE_HIL_EMULATOR_AVD: ${{ vars.CYANBRIDGE_HIL_EMULATOR_AVD || '' }}
+          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           adb="$ANDROID_HOME/platform-tools/adb"
           serial='${{ steps.emulator.outputs.serial }}'
+          if [ '${{ steps.tasker.outputs.kind }}' = 'physical' ]; then
+            # The core physical-device step replaced the x86_64 artifacts with universal APKs.
+            # Restore compact emulator artifacts before installing on the persistent AVD.
+            (
+              cd android/CyanBridge
+              ./gradlew --no-daemon --stacktrace -PtestAbi=x86_64 \
+                :app:clean :app:assembleDebug :app:assembleDebugAndroidTest
+            )
+          fi
           if [ -z "$serial" ] || [ "$($adb -s "$serial" get-state 2>/dev/null || true)" != "device" ]; then
             serial="$(bash tools/hil/start_emulator.sh)"
           fi

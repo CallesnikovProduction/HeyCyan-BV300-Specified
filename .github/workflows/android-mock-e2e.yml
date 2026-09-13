@@ -71,14 +71,15 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           disable-animations: true
           script: |
-            set -euo pipefail
-            export META_GITHUB_TOKEN="$META_GITHUB_TOKEN"
-            export GITHUB_TOKEN="$GITHUB_TOKEN"
-            cd android/CyanBridge
-            # Unit + portability first (fast failure)
-            ./gradlew --no-daemon --stacktrace :shared:portabilityTest :app:testDebugUnitTest
-            # Instrumented mock flow — covers MetaPairingMockFlowTest + existing MetaPairingScreenTest
-            ./gradlew --no-daemon --stacktrace :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.ui.MetaPairingMockFlowTest -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.ui.MetaPairingScreenTest
+            bash -euc '
+              set -o pipefail
+              cd android/CyanBridge
+              # Unit + portability first (fast failure).
+              ./gradlew --no-daemon --stacktrace -PtestAbi=x86_64 :shared:portabilityTest :app:testDebugUnitTest
+              # A single runner argument is required; repeated Gradle properties overwrite each other.
+              ./gradlew --no-daemon --stacktrace -PtestAbi=x86_64 :app:connectedDebugAndroidTest \
+                -Pandroid.testInstrumentationRunnerArguments.class=com.fersaiyan.cyanbridge.ui.MetaPairingMockFlowTest,com.fersaiyan.cyanbridge.ui.MetaPairingScreenTest
+            '
         env:
           META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

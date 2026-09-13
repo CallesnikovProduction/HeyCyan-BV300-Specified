@@ -117,7 +117,7 @@ class MetaPairingScreenTest {
         }
 
         composeRule.onNodeWithText("Continue").performClick()
-        composeRule.onNodeWithText("Meta glasses are not ready").assertIsDisplayed()
+        composeRule.onNodeWithText("No Meta glasses paired").assertIsDisplayed()
         composeRule.onNodeWithText("Send logs").performClick()
         composeRule.runOnIdle { assertTrue(diagnosticsClicked) }
     }
