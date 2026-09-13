@@ -59,6 +59,7 @@ class GeminiLiveClient(
         fun onUserSpeechActivity(active: Boolean) = Unit
         fun onTranscription(input: Boolean, text: String) = Unit
         fun onSetupComplete() = Unit
+        fun onAnnouncement(kind: GeminiLiveAnnouncement) = Unit
     }
 
     @Deprecated("Use LiveTokenConfig")
@@ -133,6 +134,7 @@ class GeminiLiveClient(
     private var lastBilledOutputMs = 0L
     private var lastBilledImages = 0
     private var lastUsageTotalTokens = 0
+    private var socketListeningStartedAtMs = 0L
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -197,6 +199,7 @@ class GeminiLiveClient(
                 .onFailure {
                     active.set(false)
                     Log.e(TAG, "Live token failed", it)
+                    listener.onAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
                     setState(GeminiLiveState.ERROR, it.message ?: "Unable to start Gemini Live")
                 }
         }
@@ -411,6 +414,9 @@ class GeminiLiveClient(
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 val wasSetupComplete = setupComplete.get()
+                val listeningDurationMs = if (socketListeningStartedAtMs > 0L) {
+                    System.currentTimeMillis() - socketListeningStartedAtMs
+                } else 0L
                 Log.w(TAG, "Gemini Live socket closed code=$code reason=$reason active=${active.get()} setupComplete=$wasSetupComplete")
                 if (socket === webSocket) socket = null
                 setupComplete.set(false)
@@ -428,14 +434,40 @@ class GeminiLiveClient(
                     setState(GeminiLiveState.ERROR, "Gemini Live connection failed ($code). Please try again.")
                     return
                 }
-                if (active.get()) scheduleReconnect()
+                if (active.get()) {
+                    val announcement = GeminiLiveReconnectAnnouncementPolicy.resolve(
+                        proxySession = config.reservationId == "free-proxy",
+                        freeTier = config.freeTier,
+                        setupCompleted = wasSetupComplete,
+                        listeningDurationMs = listeningDurationMs,
+                        reason = reason,
+                    )
+                    announcement?.let(listener::onAnnouncement)
+                    scheduleReconnect(GeminiLiveReconnectAnnouncementPolicy.detail(announcement))
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 val wasSetupComplete = setupComplete.get()
+                val listeningDurationMs = if (socketListeningStartedAtMs > 0L) {
+                    System.currentTimeMillis() - socketListeningStartedAtMs
+                } else 0L
                 if (socket === webSocket) socket = null
                 setupComplete.set(false)
                 Log.w(TAG, "Gemini Live socket failed code=${response?.code} msg=${response?.message} err=${t.message}", t)
+                val responseBody = if (response?.code == 429) {
+                    try { response.body?.string().orEmpty() } catch (_: Exception) { "" }
+                } else ""
+                if (response?.code == 429 && config.freeTier && responseBody.contains("live_free_daily_limit")) {
+                    listener.onAnnouncement(GeminiLiveAnnouncement.FREE_DAILY_LIMIT_REACHED)
+                    active.set(false)
+                    val detail = runCatching {
+                        JSONObject(responseBody.ifBlank { "{}" }).optString("message", "")
+                            .takeIf { it.isNotBlank() }
+                    }.getOrNull() ?: "You've used your 5 free Live sessions for today. Come back tomorrow, or upgrade to Pro for more access."
+                    setState(GeminiLiveState.ERROR, detail)
+                    return
+                }
                 if (config.economy && response != null && response.code in 400..499) {
                     stop()
                     setState(GeminiLiveState.ERROR, when (response.code) {
@@ -447,7 +479,7 @@ class GeminiLiveClient(
                 }
                 // Free queue: only the CyanBridge free proxy returns localized live_free_queued.
                 if (response?.code == 429 && config.reservationId == "free-proxy") {
-                    val raw = try { response.body?.string().orEmpty() } catch (_: Exception) { "" }
+                    val raw = responseBody
                     val isQueued = raw.contains("live_free_queued") || raw.contains("live_rate_limited") || t.message?.contains("429") == true
                     if (isQueued || raw.contains("live_free_queued")) {
                         val queuedDetail = runCatching {
@@ -455,12 +487,14 @@ class GeminiLiveClient(
                             json.optString("message", "").takeIf { it.isNotBlank() }
                         }.getOrNull() ?: localizedFreeQueueMessage()
                         active.set(false)
+                        listener.onAnnouncement(GeminiLiveAnnouncement.FREE_BUSY)
                         setState(GeminiLiveState.ERROR, queuedDetail)
                         return
                     }
                     // Also treat any 429 during free as queue for UX
                     if (config.reservationId == "free-proxy") {
                         active.set(false)
+                        listener.onAnnouncement(GeminiLiveAnnouncement.FREE_BUSY)
                         setState(GeminiLiveState.ERROR, localizedFreeQueueMessage())
                         return
                     }
@@ -479,7 +513,17 @@ class GeminiLiveClient(
                     setState(GeminiLiveState.ERROR, "Gemini Live connection failed. Please try again.")
                     return
                 }
-                if (active.get()) scheduleReconnect()
+                if (active.get()) {
+                    val announcement = GeminiLiveReconnectAnnouncementPolicy.resolve(
+                        proxySession = config.reservationId == "free-proxy",
+                        freeTier = config.freeTier,
+                        setupCompleted = wasSetupComplete,
+                        listeningDurationMs = listeningDurationMs,
+                        reason = t.message.orEmpty(),
+                    )
+                    announcement?.let(listener::onAnnouncement)
+                    scheduleReconnect(GeminiLiveReconnectAnnouncementPolicy.detail(announcement))
+                }
             }
 
     private fun localizedFreeQueueMessage(): String {
@@ -580,8 +624,10 @@ class GeminiLiveClient(
             return
         }
         message.optJSONObject("error")?.let { error ->
+            val quotaExhausted = error.optString("message") == "live_quota_exhausted"
+            if (!quotaExhausted) listener.onAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
             stop()
-            val detail = if (error.optString("message") == "live_quota_exhausted")
+            val detail = if (quotaExhausted)
                 "Live quota exhausted. Please wait for quota reset or upgrade."
             else "Gemini Live session failed. Please try again."
             setState(GeminiLiveState.ERROR, detail)
@@ -589,6 +635,7 @@ class GeminiLiveClient(
         }
 
         if (message.has("setupComplete") && setupComplete.compareAndSet(false, true)) {
+            socketListeningStartedAtMs = System.currentTimeMillis()
             startCapture()
             setState(GeminiLiveState.LISTENING, "Gemini Live is listening")
             listener.onSetupComplete()
@@ -1028,13 +1075,13 @@ class GeminiLiveClient(
         audioFocusRequest = null
     }
 
-    private fun scheduleReconnect() {
+    private fun scheduleReconnect(detail: String? = null) {
         if (reconnectJob?.isActive == true) return
         pauseCapture()
         reconnectJob = scope.launch {
             reconnectAttempt++
             val delayMs = (1_000L shl (reconnectAttempt - 1).coerceAtMost(4)).coerceAtMost(15_000L)
-            setState(GeminiLiveState.RECONNECTING, "Reconnecting in ${delayMs / 1000}s")
+            setState(GeminiLiveState.RECONNECTING, detail ?: "Reconnecting in ${delayMs / 1000}s")
             delay(delayMs)
             connectOrReconnect()
         }

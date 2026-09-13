@@ -19,12 +19,12 @@ After verification, run explicitly (consumes paid Live quota):
 
 ```bash
 bash tools/hil/run_pro_live_audio.sh emulator-5554
-# After deploying the Economy billing backend:
-bash tools/hil/run_pro_live_audio.sh emulator-5554 economy
+# Explicit Private-path regression (product default is Economy):
+bash tools/hil/run_pro_live_audio.sh emulator-5554 private
 ```
 
 The test refreshes server entitlement and requires an active paid plan, selects
-the requested mode (Private by default; the prior preference is restored), waits
+the requested mode (Economy by default; the prior preference is restored), waits
 for Live setup, streams the existing `gemini_live_hello_5s.wav` in 40 ms PCM
 packets plus a silence tail, and checks accumulated output transcription for
 `I like red flowers`. Setup errors fail rather than skip. The runner also

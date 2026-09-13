@@ -2,11 +2,11 @@ package com.fersaiyan.cyanbridge.ai.live
 
 import android.content.Context
 
-/** Private remains the default for existing paid users. Changes apply to the next session. */
+/** Economy is the default Live route for Pro users. Changes apply to the next session. */
 object GeminiLiveModePreferences {
     fun isEconomy(context: Context): Boolean =
         context.getSharedPreferences("gemini_live", Context.MODE_PRIVATE)
-            .getBoolean("pro_economy", false)
+            .getBoolean("pro_economy", true)
 
     fun setEconomy(context: Context, enabled: Boolean) {
         context.getSharedPreferences("gemini_live", Context.MODE_PRIVATE)

@@ -10,6 +10,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
@@ -56,6 +57,10 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
     private var initialTurnSent = false
     private val hardwareInProgress = AtomicBoolean(false)
     private var hardwareRegistered = false
+    private var announcementTts: TextToSpeech? = null
+    private var announcementTtsReady = false
+    private var pendingAnnouncement: GeminiLiveAnnouncement? = null
+    private var terminalAnnouncementIssued = false
     private val hardwareHandler: () -> Unit = { captureHardwareImageQuestion() }
 
     private val powerManager by lazy { getSystemService(Context.POWER_SERVICE) as PowerManager }
@@ -82,6 +87,13 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
             )
         }
         client = GeminiLiveClient(this, this)
+        announcementTts = TextToSpeech(applicationContext) { status ->
+            announcementTtsReady = status == TextToSpeech.SUCCESS
+            if (announcementTtsReady) pendingAnnouncement?.let {
+                pendingAnnouncement = null
+                speakAnnouncement(it)
+            }
+        }
         visionController = GeminiLiveVisionController(this, client!!) { message ->
             visionStatus = message
             updateNotification()
@@ -118,6 +130,7 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 visionController?.start()
                 // Reset per-session flags
                 initialTurnSent = false
+                terminalAnnouncementIssued = false
                 isListening = false
                 currentDetail = if (intent.getBooleanExtra(EXTRA_USE_RELAY, false)) "Connecting to CyanBridge Live relay" else "Connecting to Gemini Live"
                 updateNotification()
@@ -140,6 +153,8 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
         unregisterHardwareButton()
         visionController?.close()
         client?.close()
+        announcementTts?.shutdown()
+        announcementTts = null
         if (wakeLock.isHeld) wakeLock.release()
         super.onDestroy()
     }
@@ -291,9 +306,13 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 tickerJob?.cancel()
                 unregisterHardwareButton()
                 if (state == GeminiLiveState.ERROR) {
+                    if (!terminalAnnouncementIssued) {
+                        terminalAnnouncementIssued = true
+                        speakAnnouncement(GeminiLiveAnnouncement.GENERIC_FAILURE)
+                    }
                     // Keep notification briefly so user sees error, then stop
                     updateNotification()
-                    delay(2500L)
+                    delay(10_000L)
                     stopLive()
                     return@launch
                 }
@@ -336,6 +355,44 @@ class GeminiLiveForegroundService : Service(), GeminiLiveClient.Listener {
                 initialPrompt?.let { client?.sendTextTurn(it) }
             }
         } ?: initialPrompt?.let { client?.sendTextTurn(it) }
+    }
+
+    override fun onAnnouncement(kind: GeminiLiveAnnouncement) {
+        serviceScope.launch(Dispatchers.Main) {
+            if (kind in setOf(
+                    GeminiLiveAnnouncement.IMAGE_LIMIT_REACHED,
+                    GeminiLiveAnnouncement.FREE_DAILY_LIMIT_REACHED,
+                    GeminiLiveAnnouncement.FREE_BUSY,
+                    GeminiLiveAnnouncement.GENERIC_FAILURE,
+                )
+            ) {
+                terminalAnnouncementIssued = true
+            }
+            speakAnnouncement(kind)
+        }
+    }
+
+    private fun speakAnnouncement(kind: GeminiLiveAnnouncement) {
+        if (!announcementTtsReady) {
+            pendingAnnouncement = kind
+            return
+        }
+        val languageTag = AppLanguagePreferences.selected(this).languageTag
+            .ifBlank { Locale.getDefault().toLanguageTag() }
+        val engine = announcementTts ?: return
+        engine.language = Locale.forLanguageTag(languageTag)
+        engine.setAudioAttributes(
+            android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build(),
+        )
+        engine.speak(
+            GeminiLiveAnnouncementMessages.text(kind, languageTag),
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            "gemini_live_announcement_${System.nanoTime()}",
+        )
     }
 
     companion object {

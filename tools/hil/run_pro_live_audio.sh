@@ -3,7 +3,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SERIAL="${1:?Usage: bash tools/hil/run_pro_live_audio.sh <adb-serial>}"
-MODE="${2:-private}"
+MODE="${2:-economy}"
 case "$MODE" in private|economy) ;; *) echo "Mode must be private or economy" >&2; exit 2 ;; esac
 OUT="$ROOT/build/hil/pro-live-audio"
 mkdir -p "$OUT"

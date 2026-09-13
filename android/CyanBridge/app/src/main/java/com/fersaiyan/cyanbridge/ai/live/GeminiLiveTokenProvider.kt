@@ -24,6 +24,7 @@ data class LiveTokenConfig(
     /** Optional setup override retained for provider/test compatibility. */
     val setupJson: String? = null,
     val economy: Boolean = false,
+    val freeTier: Boolean = false,
 )
 
 interface GeminiLiveTokenProvider {
@@ -61,6 +62,7 @@ class DefaultGeminiLiveTokenProvider(
                 reservationId = "free-proxy",
                 authorizationHeader = "Bearer $authToken",
                 economy = economy,
+                freeTier = !paidPlan,
             )
         }
         val body = JSONObject()

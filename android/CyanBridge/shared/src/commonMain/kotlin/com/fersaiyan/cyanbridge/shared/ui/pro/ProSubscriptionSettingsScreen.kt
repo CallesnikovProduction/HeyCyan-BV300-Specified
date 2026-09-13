@@ -83,7 +83,7 @@ fun ProSubscriptionSettingsScreen(
     onSystemPromptChange: (String) -> Unit,
     onResetSystemPrompt: () -> Unit,
     onBack: () -> Unit,
-    liveEconomy: Boolean = false,
+    liveEconomy: Boolean = true,
     onLiveEconomyChange: ((Boolean) -> Unit)? = null,
 ) {
     var showChangePlanDialog by remember { mutableStateOf(false) }

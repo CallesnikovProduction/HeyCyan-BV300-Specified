@@ -216,7 +216,7 @@ class AudioEmulatorHarnessTest {
         val outputText = AtomicReference<String>("")
         val errorText = AtomicReference<String>("")
         val listening = CountDownLatch(1)
-        val mode = InstrumentationRegistry.getArguments().getString("proLiveMode") ?: "private"
+        val mode = InstrumentationRegistry.getArguments().getString("proLiveMode") ?: "economy"
         require(mode in setOf("private", "economy")) { "proLiveMode must be private or economy" }
         val previousEconomy = com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.isEconomy(ctx)
         com.fersaiyan.cyanbridge.ai.live.GeminiLiveModePreferences.setEconomy(ctx, mode == "economy")
