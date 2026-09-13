@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: audio-e2e-${{ github.ref }}
@@ -43,6 +44,18 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Verify Meta SDK credential
+        env:
+          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "${META_GITHUB_TOKEN:-}" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
+            echo "No GitHub token for Meta DAT packages"
+            exit 1
+          fi
+          echo "META_GITHUB_TOKEN=${META_GITHUB_TOKEN:-$GITHUB_TOKEN}" >> "$GITHUB_ENV"
+          echo "GITHUB_TOKEN=${META_GITHUB_TOKEN:-$GITHUB_TOKEN}" >> "$GITHUB_ENV"
+
       - name: Gradle cache
         uses: actions/cache@v4
         with:
@@ -63,3 +76,6 @@ jobs:
           disable-animations: true
           # Note: intentionally no -noaudio / -no-audio so AudioRecord + SpeechRecognizer surface.
           script: bash tools/hil/run_audio_emulator_ci.sh
+        env:
+          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
