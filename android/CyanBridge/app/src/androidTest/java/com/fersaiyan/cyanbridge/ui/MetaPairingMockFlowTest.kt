@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -68,10 +69,12 @@ class MetaPairingMockFlowTest {
 
         composeRule.onNodeWithText("Continue").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("meta_pairing_screen").assertIsDisplayed()
-        // Top section visible without scroll
+        composeRule.onNodeWithTag("meta_pairing_screen").assertExists()
         composeRule.onNodeWithText("Registered").assertExists()
-        composeRule.onNodeWithText("Mock Ray-Ban (Debug)").assertExists()
+        // LazyColumn items below the compact hosted-emulator viewport are not composed
+        // until scrolled into view.
+        composeRule.onNodeWithTag("meta_pairing_screen").performScrollToNode(hasText("Mock Ray-Ban (Debug)"))
+        composeRule.onNodeWithText("Mock Ray-Ban (Debug)").assertIsDisplayed()
         // Scroll to bottom where mock card + primary button live
         composeRule.onNodeWithTag("meta_pairing_screen").performScrollToNode(hasTestTag("meta_mock_switch"))
         composeRule.waitForIdle()

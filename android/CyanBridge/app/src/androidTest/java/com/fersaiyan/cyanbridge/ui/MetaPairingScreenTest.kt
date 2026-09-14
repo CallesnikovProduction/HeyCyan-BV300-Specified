@@ -1,10 +1,12 @@
 package com.fersaiyan.cyanbridge.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.metarayban.MetaAccessState
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
@@ -65,8 +67,10 @@ class MetaPairingScreenTest {
         }
 
         composeRule.onNodeWithText("Continue").performClick()
-        composeRule.onNodeWithTag("meta_pairing_screen").assertIsDisplayed()
+        composeRule.onNodeWithTag("meta_pairing_screen").assertExists()
+        composeRule.onNodeWithTag("meta_pairing_screen").performScrollToNode(hasText("Ray-Ban Meta"))
         composeRule.onNodeWithText("Ray-Ban Meta").assertIsDisplayed()
+        composeRule.onNodeWithTag("meta_pairing_screen").performScrollToNode(hasText("Test AI image question"))
         composeRule.onNodeWithText("Test AI image question").performClick()
         composeRule.runOnIdle { assertTrue(clicked) }
     }
