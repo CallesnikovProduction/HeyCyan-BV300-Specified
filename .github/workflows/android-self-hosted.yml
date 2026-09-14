@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   android:
-    name: Android unit tests and debug APK
+    name: Android build, unit, and emulator tests
     if: github.repository == 'FerSaiyan/Alternative-HeyCyan-App-and-SDK'
     runs-on: [self-hosted, linux, x64, homelab]
     timeout-minutes: 90
@@ -72,11 +72,44 @@ jobs:
           :app:testDebugUnitTest
           :shared:portabilityTest
 
-      - name: Assemble debug APK
+      - name: Assemble debug and instrumentation APKs
         env:
           META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         working-directory: android/CyanBridge
-        run: ./gradlew --no-daemon --stacktrace :app:assembleDebug
+        run: >-
+          ./gradlew --no-daemon --stacktrace
+          -PtestAbi=x86_64
+          :app:assembleDebug
+          :app:assembleDebugAndroidTest
+
+      - name: Find or start local automation emulator
+        id: emulator
+        shell: bash
+        env:
+          CYANBRIDGE_HIL_EMULATOR_AVD: ${{ vars.CYANBRIDGE_HIL_EMULATOR_AVD || '' }}
+        run: |
+          set -euo pipefail
+          serial="$(bash tools/hil/start_emulator.sh)"
+          test -n "$serial"
+          test "$(adb -s "$serial" get-state)" = "device"
+          echo "serial=$serial" >> "$GITHUB_OUTPUT"
+
+      - name: Install branch build on local emulator
+        run: bash tools/hil/install.sh '${{ steps.emulator.outputs.serial }}'
+
+      - name: Run Mock DAT and Meta pairing instrumentation
+        run: >-
+          bash tools/hil/run_instrumentation.sh
+          '${{ steps.emulator.outputs.serial }}'
+          emulator
+          com.fersaiyan.cyanbridge.ui.MetaPairingMockFlowTest,com.fersaiyan.cyanbridge.ui.MetaPairingScreenTest
+
+      - name: Run hermetic audio instrumentation
+        run: >-
+          bash tools/hil/run_instrumentation.sh
+          '${{ steps.emulator.outputs.serial }}'
+          emulator
+          com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#assets_AllThreeFixturesExist,com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#meetingTranscriptionFromSeededAsset_hermetic,com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#handsFreeTranslator_fromAssetTranscript,com.fersaiyan.cyanbridge.hil.audio.AudioEmulatorHarnessTest#geminiLive_pcmInjectionDoesNotCrash
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

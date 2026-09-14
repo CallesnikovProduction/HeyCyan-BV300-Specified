@@ -6,7 +6,6 @@ on:
     paths:
       - .github/workflows/ios-kmp-host.yml
       - android/CyanBridge/shared/**
-      - android/CyanBridge/app/**
       - android/CyanBridge/settings.gradle.kts
       - android/CyanBridge/build.gradle.kts
       - android/CyanBridge/gradle/**
