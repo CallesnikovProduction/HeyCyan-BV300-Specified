@@ -1,10 +1,7 @@
 package com.fersaiyan.cyanbridge.agent
 
 import android.content.Context
-import android.net.Uri
-import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
-import com.fersaiyan.cyanbridge.shared.billing.BillingProvider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -15,9 +12,7 @@ import java.net.ConnectException
 import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URL
-import java.net.URLEncoder
 import java.net.UnknownHostException
-import java.util.UUID
 
 object ProSubscriptionRelayClient {
     data class ModelOption(
@@ -46,55 +41,17 @@ object ProSubscriptionRelayClient {
         val liveModes: List<LiveModeOption>,
     )
 
-    data class QuotaInfo(
-        val used: Int,
-        val limit: Int,
-        val remaining: Int,
-        val resetAtMs: Long,
-        val model: String,
-    )
-
-    data class BetaInterestResult(
-        val accepted: Boolean,
-        val interestedCount: Int?,
-        val message: String,
-    )
-
     data class AccountInfo(
         val apiToken: String,
         val email: String,
         val emailVerified: Boolean,
-        val plan: String,
-        val subscriptionStatus: String,
-        val expiresAtMs: Long,
     )
-
-    data class CancelResult(
-        val active: Boolean,
-        val plan: String,
-        val expiresAtMs: Long,
-        val message: String,
-    )
-
-    data class EmailVerificationResult(
-        val method: String,
-        val message: String,
-        val verificationUrl: String? = null,
-    ) {
-        val isEmailMatchFallback: Boolean
-            get() = method == "email_match"
-
-        val hasDirectVerificationLink: Boolean
-            get() = verificationUrl != null
-    }
 
     private const val CONNECT_TIMEOUT_MS = 7000
     private const val READ_TIMEOUT_MS = 15000
     private const val RELAY_DOWN_HINT =
         "Server may be down or this app may need an update to use the new server address."
 
-    private const val FEEDBACK_PREFS = "pro_feature_feedback"
-    private const val KEY_INSTALLATION_ID = "installation_id"
 
     fun fetchModelCatalog(context: Context): Result<ModelCatalog> = runCatching {
         val candidates = listOf("/models", "/v1/models")
@@ -152,87 +109,6 @@ object ProSubscriptionRelayClient {
         return defaultLiveModes().map { fallback -> byId[fallback.id] ?: fallback }
     }
 
-    fun fetchQuota(context: Context, model: String): Result<QuotaInfo> = runCatching {
-        val encodedModel = URLEncoder.encode(model, Charsets.UTF_8.name())
-        val getPaths = listOf(
-            "/pro/quota?model=$encodedModel",
-            "/quota?model=$encodedModel",
-            "/usage/quota?model=$encodedModel",
-            "/pro/quota",
-            "/quota",
-            "/usage/quota",
-        )
-
-        var lastError: Throwable? = null
-        for (path in getPaths) {
-            val res = runCatching {
-                val payload = requestGetJson(context, endpoint(context, path))
-                parseQuota(payload, model)
-            }
-            if (res.isSuccess) return@runCatching res.getOrThrow()
-            lastError = res.exceptionOrNull()
-        }
-
-        val postPaths = listOf("/pro/quota", "/quota", "/usage/quota")
-        for (path in postPaths) {
-            val res = runCatching {
-                val payload = requestPostJson(
-                    context = context,
-                    url = endpoint(context, path),
-                    body = JSONObject().put("model", model)
-                )
-                parseQuota(payload, model)
-            }
-            if (res.isSuccess) return@runCatching res.getOrThrow()
-            lastError = res.exceptionOrNull()
-        }
-
-        throw lastError ?: IllegalStateException("Quota endpoint unavailable")
-    }
-
-    fun registerBetaCloudInterest(context: Context): Result<BetaInterestResult> = runCatching {
-        val installationId = installationId(context)
-        val payload = JSONObject()
-            .put("installation_id", installationId)
-            .put("package_name", context.packageName)
-            .put("plan", ProSubscriptionPrefs.getPlan(context))
-            .put("provider", ProSubscriptionPrefs.getProvider(context))
-            .put("requests_model", ProSubscriptionAiPrefs.getRequestsModel(context))
-            .put("questions_model", ProSubscriptionAiPrefs.getQuestionsModel(context))
-            .put("tasks_model", ProSubscriptionAiPrefs.getTasksModel(context))
-            .put("platform", "android")
-
-        val paths = listOf(
-            "/pro/beta-cloud-interest",
-            "/beta-cloud-interest",
-            "/pro/beta-cloud/signup",
-            "/beta-cloud/signup",
-        )
-
-        var lastError: Throwable? = null
-        for (path in paths) {
-            val res = runCatching {
-                val json = requestPostJson(context, endpoint(context, path), payload)
-                val accepted = json.optBoolean("accepted", true)
-                val count = intOrNull(json, "interested_count")
-                    ?: intOrNull(json, "count")
-                    ?: intOrNull(json, "total_interested")
-                val message = json.optString("message").ifBlank {
-                    if (accepted) "Interest registered" else "Interest request rejected"
-                }
-                BetaInterestResult(
-                    accepted = accepted,
-                    interestedCount = count,
-                    message = message,
-                )
-            }
-            if (res.isSuccess) return@runCatching res.getOrThrow()
-            lastError = res.exceptionOrNull()
-        }
-
-        throw lastError ?: IllegalStateException("Beta cloud interest endpoint unavailable")
-    }
-
     fun fetchAccountInfo(context: Context): Result<AccountInfo> = runCatching {
         val existingToken = ProSubscriptionServerPrefs.getApiToken(context).trim()
 
@@ -261,122 +137,6 @@ object ProSubscriptionRelayClient {
                 }
             }
         }
-    }
-
-    fun createWebCheckoutSession(
-        context: Context,
-        plan: String,
-        provider: BillingProvider,
-        returnUrl: String,
-        changePlan: Boolean = false,
-    ): Result<String> = runCatching {
-        check(provider == BillingProvider.ASAAS || provider == BillingProvider.PADDLE) {
-            "Website checkout requires Asaas or Paddle"
-        }
-        val apiToken = ProSubscriptionServerPrefs.getApiToken(context).trim().ifBlank {
-            fetchAccountInfo(context).getOrThrow().apiToken.trim()
-        }
-        check(apiToken.isNotBlank()) { "Server account token unavailable" }
-
-        check(SubscriptionCheckoutPolicy.callbackResultFrom(Uri.parse(returnUrl)) != null) {
-            "Checkout must return through the verified app link"
-        }
-        val checkoutPageUrl = SubscriptionCheckoutPolicy.resolveWebCheckoutUrl(context).trim()
-        val checkoutPageUri = Uri.parse(checkoutPageUrl)
-        check(
-            checkoutPageUri.scheme?.equals("https", ignoreCase = true) == true ||
-                (BuildConfig.DEBUG && checkoutPageUri.scheme?.equals("http", ignoreCase = true) == true),
-        ) {
-            "Website checkout must use HTTPS"
-        }
-
-        val checkoutSessionEndpoint = SubscriptionCheckoutPolicy.checkoutSessionEndpoint(checkoutPageUrl)
-        val response = requestPostJson(
-            context = context,
-            url = checkoutSessionEndpoint,
-            body = JSONObject()
-                .put("plan", plan)
-                .put("provider", provider.wireName)
-                .put("return_url", returnUrl)
-                .put("change_plan", changePlan),
-        )
-        val checkoutUrl = response.optString("checkout_url").trim()
-        check(checkoutUrl.isNotBlank()) { "Checkout session did not return a checkout URL" }
-
-        check(SubscriptionCheckoutPolicy.isExpectedCheckoutSessionUrl(checkoutPageUrl, checkoutUrl)) {
-            "Checkout session returned an unexpected checkout URL"
-        }
-        checkoutUrl
-    }
-
-    fun requestAccountEmailVerification(context: Context, email: String): Result<EmailVerificationResult> = runCatching {
-        val apiToken = ProSubscriptionServerPrefs.getApiToken(context).trim().ifBlank {
-            fetchAccountInfo(context).getOrThrow().apiToken.trim()
-        }
-        check(apiToken.isNotBlank()) { "Server account token unavailable" }
-        val payload = requestPostJson(
-            context = context,
-            url = endpoint(context, "/api/auth/relay/access-link"),
-            body = JSONObject().put("email", email),
-        )
-        check(payload.optBoolean("ok", false)) { payload.optString("message", "Unable to send verification email.") }
-        val verificationUrl = payload.optString("verification_url").trim().ifBlank { null }
-        check(verificationUrl == null || verificationUrl.startsWith("https://")) {
-            "The server returned an invalid verification link."
-        }
-        val method = payload.optString("verification_method").trim().ifBlank {
-            if (verificationUrl != null) "direct_link" else "magic_link"
-        }
-        check(method == "magic_link" || method == "email_match" || method == "direct_link") {
-            "Unsupported email verification response."
-        }
-        if (method == "email_match") {
-            check(payload.optString("email").trim().equals(email.trim(), ignoreCase = true)) {
-                "The server confirmed a different email address."
-            }
-        }
-        EmailVerificationResult(
-            method = method,
-            message = payload.optString("message", "Check your email to verify this CyanBridge account."),
-            verificationUrl = verificationUrl,
-        )
-    }
-
-    fun verifyAccountEmailCode(context: Context, code: String): Result<AccountInfo> = runCatching {
-        val apiToken = ProSubscriptionServerPrefs.getApiToken(context).trim().ifBlank {
-            fetchAccountInfo(context).getOrThrow().apiToken.trim()
-        }
-        check(apiToken.isNotBlank()) { "Server account token unavailable" }
-        val normalized = code.trim().uppercase().replace(Regex("[\\s-]"), "")
-        require(normalized.matches(Regex("^[0-9]{6}$"))) { "Enter the 6-digit code from your email." }
-        val payload = requestPostJson(
-            context = context,
-            url = endpoint(context, "/api/auth/relay/verify-code"),
-            body = JSONObject().put("code", normalized),
-        )
-        check(payload.optBoolean("ok", false)) { payload.optString("message", "Invalid code.") }
-        val account = fetchAccountInfo(context).getOrThrow()
-        check(account.emailVerified) { "Email not verified yet." }
-        account
-    }
-
-    fun cancelSubscription(context: Context): Result<CancelResult> = runCatching {
-        val serverToken = ProSubscriptionServerPrefs.getApiToken(context).trim().ifBlank {
-            fetchAccountInfo(context).getOrThrow().apiToken.trim()
-        }
-
-        val payload = JSONObject()
-            .put("api_token", serverToken)
-
-        val json = requestPostJson(context, endpoint(context, "/web-subscribe/cancel"), payload)
-        CancelResult(
-            active = json.optBoolean("active", false),
-            plan = json.optString("plan").trim().ifBlank { "none" },
-            expiresAtMs = json.optLong("expires_at_ms", 0L),
-            message = json.optString("message").trim().ifBlank {
-                if (json.optBoolean("ok", false)) "Subscription updated" else "Subscription cancel failed"
-            },
-        )
     }
 
     private fun parseModels(payload: JSONObject): List<ModelOption> {
@@ -479,38 +239,6 @@ object ProSubscriptionRelayClient {
             apiToken = payload.optString("api_token").trim(),
             email = payload.optString("email").trim(),
             emailVerified = payload.optBoolean("email_verified", false),
-            plan = payload.optString("plan").trim().ifBlank { "free" },
-            subscriptionStatus = payload.optString("subscription_status").trim().ifBlank { "inactive" },
-            expiresAtMs = payload.optLong("expires_at_ms", 0L),
-        )
-    }
-
-    private fun parseQuota(payload: JSONObject, fallbackModel: String): QuotaInfo {
-        val remaining = intOrNull(payload, "remaining")
-            ?: intOrNull(payload, "remaining_requests")
-            ?: intOrNull(payload, "quota_remaining")
-
-        val limit = intOrNull(payload, "limit")
-            ?: intOrNull(payload, "request_limit")
-            ?: intOrNull(payload, "quota_limit")
-
-        val used = intOrNull(payload, "used")
-            ?: intOrNull(payload, "used_requests")
-            ?: intOrNull(payload, "quota_used")
-
-        val model = payload.optString("model").ifBlank { fallbackModel }
-        val resetAtMs = payload.optLong("reset_at_ms", payload.optLong("resetAtMs", 0L))
-
-        val finalUsed = used ?: if (limit != null && remaining != null) (limit - remaining).coerceAtLeast(0) else 0
-        val finalLimit = limit ?: if (used != null && remaining != null) used + remaining else 0
-        val finalRemaining = remaining ?: if (finalLimit > 0) (finalLimit - finalUsed).coerceAtLeast(0) else 0
-
-        return QuotaInfo(
-            used = finalUsed,
-            limit = finalLimit,
-            remaining = finalRemaining,
-            resetAtMs = resetAtMs,
-            model = model,
         )
     }
 
@@ -544,16 +272,6 @@ object ProSubscriptionRelayClient {
         return (0 until array.length()).any { index ->
             array.optString(index).equals(expected, ignoreCase = true)
         }
-    }
-
-    private fun installationId(context: Context): String {
-        val prefs = context.getSharedPreferences(FEEDBACK_PREFS, Context.MODE_PRIVATE)
-        val existing = prefs.getString(KEY_INSTALLATION_ID, "").orEmpty().trim()
-        if (existing.isNotBlank()) return existing
-
-        val generated = UUID.randomUUID().toString()
-        prefs.edit().putString(KEY_INSTALLATION_ID, generated).apply()
-        return generated
     }
 
     private fun endpoint(context: Context, path: String): String {

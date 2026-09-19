@@ -13,33 +13,13 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url = uri("https://jitpack.io") }
-        // JetBrains Compose Multiplatform (including Skiko native binaries for iOS).
+        // JetBrains Compose Multiplatform artifacts used by the shared module.
         // Restrict this repository so unrelated dependencies do not query it.
         maven {
             url = uri("https://maven.pkg.jetbrains.space/public/p/compose/dev")
             content {
                 includeGroupByRegex("org\\.jetbrains\\.compose.*")
                 includeGroupByRegex("org\\.jetbrains\\.skiko.*")
-            }
-        }
-
-        // Meta Wearables DAT SDK (requires GitHub token with read:packages scope)
-        val localProps = java.util.Properties()
-        val localPropsFile = rootDir.resolve("local.properties")
-        if (localPropsFile.exists()) {
-            localProps.load(localPropsFile.inputStream())
-        }
-        val githubToken = System.getenv("META_GITHUB_TOKEN")
-            ?.takeIf { it.isNotBlank() }
-            ?: System.getenv("GITHUB_TOKEN")?.takeIf { it.isNotBlank() }
-            ?: localProps.getProperty("github_token")?.takeIf { it.isNotBlank() }
-        if (!githubToken.isNullOrBlank()) {
-            maven {
-                url = uri("https://maven.pkg.github.com/facebook/meta-wearables-dat-android")
-                credentials {
-                    username = ""
-                    password = githubToken
-                }
             }
         }
     }

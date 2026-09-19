@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
 import androidx.test.core.app.ApplicationProvider
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -19,7 +18,6 @@ class WalkingAidReadinessCheckerTest {
 
     @Before
     fun setUp() {
-        ProSubscriptionPrefs.clearEntitlement(context)
         WalkingAidPreferences.setImageDescriptionSource(context, "local")
         WalkingAidPreferences.setYoloModelType(context, WalkingAidPreferences.MODEL_TYPE_YOLO11)
         WalkingAidPreferences.setDepthEnabled(context, true)
@@ -39,20 +37,17 @@ class WalkingAidReadinessCheckerTest {
     }
 
     @Test
-    fun checkReadiness_requiresProForCloud_whenNotProSubscribed() {
+    fun checkReadiness_cloudDescriptionStillRequiresLocalDetector() {
         WalkingAidPreferences.setImageDescriptionSource(context, "cloud")
         val readiness = WalkingAidReadinessChecker.checkReadiness(context)
         assertFalse(readiness.isReady)
         assertFalse(readiness.yoloReady)
-        assertTrue(readiness.requiresProForCloud)
     }
 
     @Test
-    fun checkReadiness_passesCloud_whenProSubscribed() {
+    fun checkReadiness_passesCloudWithLocalDetector() {
         val detector = File(context.filesDir, "yolo11n_float16.tflite")
         detector.writeBytes(ByteArray(1024))
-        ProSubscriptionPrefs.setSubscribed(context, true)
-        ProSubscriptionPrefs.setExpiresAt(context, System.currentTimeMillis() + 86400000L)
         WalkingAidPreferences.setImageDescriptionSource(context, "cloud")
         WalkingAidPreferences.setDepthSource(context, "cloud")
         WalkingAidPreferences.setStateModelSource(context, "cloud")
@@ -63,7 +58,6 @@ class WalkingAidReadinessCheckerTest {
             assertTrue(readiness.yoloReady)
             assertTrue(readiness.depthReady)
             assertTrue(readiness.llmReady)
-            assertFalse(readiness.requiresProForCloud)
         } finally {
             detector.delete()
         }
@@ -71,8 +65,6 @@ class WalkingAidReadinessCheckerTest {
 
     @Test
     fun checkReadiness_cloudEnrichmentStillRequiresLocalSafetyDetector() {
-        ProSubscriptionPrefs.setSubscribed(context, true)
-        ProSubscriptionPrefs.setExpiresAt(context, System.currentTimeMillis() + 86400000L)
         WalkingAidPreferences.setImageDescriptionSource(context, "cloud")
         WalkingAidPreferences.setDepthEnabled(context, false)
 
@@ -80,7 +72,6 @@ class WalkingAidReadinessCheckerTest {
 
         assertFalse(readiness.isReady)
         assertFalse(readiness.yoloReady)
-        assertFalse(readiness.requiresProForCloud)
     }
 
     @Test

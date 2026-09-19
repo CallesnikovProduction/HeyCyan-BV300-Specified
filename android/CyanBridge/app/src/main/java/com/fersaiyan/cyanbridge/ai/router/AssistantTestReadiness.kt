@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.ai.router
 
 import android.content.Context
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionVerifier
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
@@ -15,7 +14,6 @@ enum class AssistantTestKind {
 
 enum class AssistantSetupDestination {
     LOCAL_MODELS,
-    PRO_SUBSCRIPTION,
 }
 
 data class AssistantSetupIssue(
@@ -33,7 +31,7 @@ object AssistantTestReadiness {
         kind: AssistantTestKind,
     ): AssistantSetupIssue? = when (route) {
         GlassesAssistantRoute.LOCAL -> localIssue(context, kind)
-        GlassesAssistantRoute.PRO -> proIssue(context, kind)
+        GlassesAssistantRoute.PRO -> null
         GlassesAssistantRoute.PHONE_ASSISTANT,
         GlassesAssistantRoute.TASKER_EXTERNAL_UI -> null
     }
@@ -72,16 +70,4 @@ object AssistantTestReadiness {
         return null
     }
 
-    private fun proIssue(context: Context, kind: AssistantTestKind? = null): AssistantSetupIssue? {
-        if (ProSubscriptionVerifier.localStatus(context).active) return null
-        // Free users selecting Pro for AI image/voice go via Free Gemini Live relay (server holds key, no token to phone)
-        // Do not block those; only block non-multimodal Pro usage if needed. For now VOICE/IMAGE are the only kinds checked.
-        if (kind == AssistantTestKind.IMAGE || kind == AssistantTestKind.VOICE) return null
-        return AssistantSetupIssue(
-            title = "Pro subscription required",
-            message = "The selected Pro provider has no active subscription. Choose Local Models instead or activate a Pro plan.",
-            actionLabel = "View Pro plans",
-            destination = AssistantSetupDestination.PRO_SUBSCRIPTION,
-        )
-    }
 }

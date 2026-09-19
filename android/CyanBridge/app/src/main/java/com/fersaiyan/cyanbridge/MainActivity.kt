@@ -40,7 +40,6 @@ import com.fersaiyan.cyanbridge.ota.OtaState
 import com.fersaiyan.cyanbridge.ota.OtaTarget
 import com.fersaiyan.cyanbridge.ota.expectedFirmwareExtension
 import com.fersaiyan.cyanbridge.ota.firmwareRelayBaseUrl
-import com.fersaiyan.cyanbridge.ota.firmwareSubscriptionGateCopy
 import com.fersaiyan.cyanbridge.ota.isExpectedFirmwareFilename
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionLease
@@ -203,11 +202,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
-import com.fersaiyan.cyanbridge.ai.router.AssistantSetupDestination
 import com.fersaiyan.cyanbridge.ai.router.AssistantTestKind
 import com.fersaiyan.cyanbridge.ai.router.AssistantTestReadiness
 import com.fersaiyan.cyanbridge.ai.router.AssistantIntent
@@ -1307,11 +1303,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 .setMessage(issue.message)
                 .setNegativeButton("Not now", null)
                 .setPositiveButton(issue.actionLabel) { _, _ ->
-                    val destination = when (issue.destination) {
-                        AssistantSetupDestination.LOCAL_MODELS -> LocalModelsConfigureActivity::class.java
-                        AssistantSetupDestination.PRO_SUBSCRIPTION -> ProSubscriptionActivity::class.java
-                    }
-                    startActivity(Intent(this, destination))
+                    startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
                 }
                 .show()
             return true
@@ -3522,19 +3514,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
 
                 is FirmwareResult.SubscriptionRequired -> {
-                    val copy = firmwareSubscriptionGateCopy(result.currentPlan)
                     AlertDialog.Builder(this@MainActivity)
-                        .setTitle(copy.title)
-                        .setMessage(copy.message)
-                        .setNegativeButton("Not now", null)
-                        .setPositiveButton(copy.actionLabel) { _, _ ->
-                            startActivity(
-                                Intent(this@MainActivity, ProSubscriptionActivity::class.java).apply {
-                                    putExtra(ProSubscriptionActivity.EXTRA_INITIAL_PLAN, "standard")
-                                    putExtra(ProSubscriptionActivity.EXTRA_CHANGE_PLAN, true)
-                                },
-                            )
-                        }
+                        .setTitle("Firmware server access denied")
+                        .setMessage(result.message)
+                        .setPositiveButton("OK", null)
                         .show()
                 }
 
@@ -4541,13 +4524,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun shouldUseGeminiLiveQuestions(providerType: AgentProviderType): Boolean {
         if (providerType != AgentProviderType.PRO_SUBSCRIPTION) return false
-        val isProActive = ProSubscriptionPrefs.isActiveLocally(this)
         val questionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this)
         val result = ProSubscriptionAiPrefs.shouldUseGeminiLiveForQuestions(
-            isProActive = isProActive,
             questionsModel = questionsModel,
         )
-        Log.i("GeminiLive", "shouldUseGeminiLiveQuestions isProActive=$isProActive questionsModel=$questionsModel result=$result")
+        Log.i("GeminiLive", "shouldUseGeminiLiveQuestions questionsModel=$questionsModel result=$result")
         return result
     }
 
@@ -4582,19 +4563,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // button path prefers the notification-driven service with a Stop action.
         val launch: () -> Unit = {
             try {
-                val isPro = com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs.isActiveLocally(this) &&
-                    com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs.getPlan(this).lowercase() in setOf("cheap", "standard", "max")
                 com.fersaiyan.cyanbridge.ai.live.GeminiLiveForegroundService.start(
                     context = this,
                     language = languageTag,
                     imagePrompt = baseImagePrompt,
                     initialImagePath = imagePath,
                     initialPrompt = initialPrompt,
-                    useRelay = !isPro,
+                    useRelay = true,
                 )
                 Log.i(
                     "GeminiLive",
-                    "Started Live foreground service initialImage=${!imagePath.isNullOrBlank()} useRelay=${!isPro}",
+                    "Started Live foreground service initialImage=${!imagePath.isNullOrBlank()} useRelay=true",
                 )
                 // Keep activity launch as fallback for debugging if service is unavailable
                 // (no-op if service already handles it). Not started by default.

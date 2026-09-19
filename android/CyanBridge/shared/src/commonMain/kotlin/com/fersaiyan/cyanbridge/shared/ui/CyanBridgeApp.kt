@@ -17,9 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.shared.appearance.AppearanceSettings
-import com.fersaiyan.cyanbridge.shared.billing.ProSubscriptionAction
-import com.fersaiyan.cyanbridge.shared.billing.ProSubscriptionUiState
-import com.fersaiyan.cyanbridge.shared.billing.unavailableProSubscriptionStatus
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardAction
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
@@ -53,8 +50,6 @@ fun CyanBridgeApp(
     onAppearanceReset: () -> Unit = {},
     onNavigateToActivity: (AppDestination) -> Unit = {},
     useSharedDestinations: Boolean = false,
-    proSubscriptionState: ProSubscriptionUiState = ProSubscriptionUiState(),
-    onProSubscriptionAction: (ProSubscriptionAction) -> String = ::unavailableProSubscriptionStatus,
 ) {
     var currentDestination by remember(initialDestination) { mutableStateOf(initialDestination) }
     var showAppearance by remember { mutableStateOf(false) }
@@ -116,8 +111,6 @@ fun CyanBridgeApp(
                         destination = destination,
                         onDestinationSelected = { currentDestination = it },
                         onOpenAppearance = { showAppearance = true },
-                        proSubscriptionState = proSubscriptionState,
-                        onProSubscriptionAction = onProSubscriptionAction,
                     )
                 } else {
                         ActivityLaunchPlaceholder(

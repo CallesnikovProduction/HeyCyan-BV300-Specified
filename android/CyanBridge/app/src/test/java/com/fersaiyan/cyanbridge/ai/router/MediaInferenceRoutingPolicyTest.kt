@@ -6,18 +6,14 @@ import org.junit.Test
 
 class MediaInferenceRoutingPolicyTest {
     @Test
-    fun localFallsBackToProThenTasker() {
+    fun localSelectionNeverFallsBackToCloudWithoutConsent() {
         assertEquals(
             AgentProviderType.LOCAL_AGENT,
-            MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, true, false),
+            MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, true),
         )
         assertEquals(
-            AgentProviderType.PRO_SUBSCRIPTION,
-            MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, false, true),
-        )
-        assertEquals(
-            AgentProviderType.TASKER,
-            MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, false, false),
+            AgentProviderType.LOCAL_AGENT,
+            MediaInferenceRoutingPolicy.resolve(AgentProviderType.LOCAL_AGENT, false),
         )
     }
 
@@ -28,20 +24,18 @@ class MediaInferenceRoutingPolicyTest {
             MediaInferenceRoutingPolicy.resolve(
                 preferred = AgentProviderType.TASKER,
                 localMediaAvailable = true,
-                proAvailable = false,
                 taskerUsesLocalModels = true,
             ),
         )
     }
 
     @Test
-    fun explicitProSelectionKeepsFreeGeminiLiveRoute() {
+    fun explicitRelaySelectionStaysOnRelay() {
         assertEquals(
             AgentProviderType.PRO_SUBSCRIPTION,
             MediaInferenceRoutingPolicy.resolve(
                 preferred = AgentProviderType.PRO_SUBSCRIPTION,
                 localMediaAvailable = false,
-                proAvailable = false,
             ),
         )
         assertEquals(
@@ -49,7 +43,6 @@ class MediaInferenceRoutingPolicyTest {
             MediaInferenceRoutingPolicy.resolve(
                 preferred = AgentProviderType.PRO_SUBSCRIPTION,
                 localMediaAvailable = true,
-                proAvailable = false,
             ),
         )
     }

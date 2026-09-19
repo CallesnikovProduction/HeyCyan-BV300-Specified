@@ -26,11 +26,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -71,8 +68,6 @@ import com.fersaiyan.cyanbridge.shared.ui.localizedDestinationLabel
 import com.fersaiyan.cyanbridge.shared.ui.localizedProviderLabel
 
 data class SettingsUiState(
-    val isProSubscribed: Boolean = false,
-    val proPlan: String = "Pro",
     val appLanguageLabel: String = "System default",
     val providerType: AgentProviderType = AgentProviderType.PRO_SUBSCRIPTION,
     val taskerIntegrationsAvailable: Boolean = false,
@@ -99,9 +94,9 @@ interface SettingsScreenActions {
     fun onDestinationSelected(destination: AppDestination)
     fun openAppearance()
     fun openAppLanguageSelection()
-    fun openSubscription()
     fun setProviderType(type: AgentProviderType)
     fun openLocalModels()
+    fun openAssistantModels()
     fun openTaskerIntegrations() = Unit
     fun setDefaultImageQuestion(question: String)
     fun resetDefaultImageQuestion()
@@ -189,13 +184,6 @@ fun SettingsScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item {
-                ProSubscriptionCard(
-                    isSubscribed = state.isProSubscribed,
-                    proPlan = state.proPlan,
-                    onClick = actions::openSubscription,
-                )
-            }
             if (state.meetingRecording) {
                 item {
                     MeetingRecordingBanner(
@@ -319,111 +307,6 @@ private fun MeetingRecordingBanner(
                 modifier = Modifier.heightIn(min = 48.dp),
             ) {
                 Text(stringResource(Res.string.action_stop))
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProSubscriptionCard(
-    isSubscribed: Boolean,
-    proPlan: String,
-    onClick: () -> Unit,
-) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("settings_subscription")
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-        ),
-        shape = MaterialTheme.shapes.extraLarge,
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    modifier = Modifier.size(56.dp),
-                    color = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                    shape = MaterialTheme.shapes.large,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.AutoAwesome,
-                        contentDescription = null,
-                        modifier = Modifier.padding(14.dp),
-                    )
-                }
-                Spacer(Modifier.width(16.dp))
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = stringResource(
-                                if (isSubscribed) {
-                                    Res.string.settings_pro_subscription_settings
-                                } else {
-                                    Res.string.settings_pro_subscription
-                                },
-                            ),
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Surface(
-                            color = MaterialTheme.colorScheme.tertiary,
-                            contentColor = MaterialTheme.colorScheme.onTertiary,
-                            shape = MaterialTheme.shapes.large,
-                        ) {
-                            Text(
-                                text = stringResource(
-                                    if (isSubscribed) Res.string.settings_pro_active else Res.string.settings_pro_badge,
-                                ),
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-                    Text(
-                        text = if (isSubscribed) {
-                            stringResource(Res.string.settings_current_plan, proPlan)
-                        } else {
-                            stringResource(Res.string.settings_unlock_premium)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    )
-                }
-            }
-            Button(
-                onClick = onClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiary,
-                    contentColor = MaterialTheme.colorScheme.onTertiary,
-                ),
-            ) {
-                Text(
-                    stringResource(
-                        if (isSubscribed) Res.string.settings_manage_subscription else Res.string.settings_view_plans,
-                    ),
-                )
             }
         }
     }
@@ -569,11 +452,7 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
                 selected = state.providerType == type,
                 onClick = { actions.setProviderType(type) },
             )
-            val baseLabel = localizedProviderLabel(type)
-            val label = if (type == AgentProviderType.PRO_SUBSCRIPTION && !state.isProSubscribed) {
-                "$baseLabel (Free Gemini Live)"
-            } else baseLabel
-            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text(localizedProviderLabel(type), style = MaterialTheme.typography.bodyMedium)
         }
     }
     if (state.taskerIntegrationsAvailable) {
@@ -605,6 +484,12 @@ private fun AiAutomationContent(state: SettingsUiState, actions: SettingsScreenA
         ) {
             Text(stringResource(Res.string.settings_configure_local_models))
         }
+    }
+    OutlinedButton(
+        onClick = actions::openAssistantModels,
+        modifier = Modifier.fillMaxWidth().testTag("settings_assistant_models"),
+    ) {
+        Text("Assistant model and prompt settings")
     }
     Text(
         text = stringResource(Res.string.image_questions_title),

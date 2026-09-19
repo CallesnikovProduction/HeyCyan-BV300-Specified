@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -31,14 +33,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsConnectionStatus
 import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
+import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AssistantSettingsActivity : AppCompatActivity() {
     private val transport = ChatGPTAccountTransport()
@@ -48,11 +57,22 @@ class AssistantSettingsActivity : AppCompatActivity() {
     private var browserOpened by mutableStateOf(false)
     private var copiedText by mutableStateOf<String?>(null)
     private var voiceTestArmed by mutableStateOf(false)
+    private var requestsModel by mutableStateOf("auto")
+    private var questionsModel by mutableStateOf("auto")
+    private var tasksModel by mutableStateOf("auto")
+    private var systemPrompt by mutableStateOf("")
+    private var availableModels by mutableStateOf(listOf("auto", "google/gemini-3.1-flash-live-preview"))
+    private var modelCatalogStatus by mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         manualMode = AssistantPreferences.manualMode(this)
         conversationName = AssistantPreferences.conversationName(this)
+        requestsModel = ProSubscriptionAiPrefs.getRequestsModel(this)
+        questionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this)
+        tasksModel = ProSubscriptionAiPrefs.getTasksModel(this)
+        systemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(this)
+        availableModels = (availableModels + requestsModel + questionsModel + tasksModel).distinct()
         browserOpened = savedInstanceState?.getBoolean("browser_opened") ?: false
         val appearancePreferences = AppearancePreferences(this)
         setContent {
@@ -100,6 +120,37 @@ class AssistantSettingsActivity : AppCompatActivity() {
                 Text("Speech recognition: ${assistant.lastStt} · local model required")
                 Text("Speech output: local TTS to BV300 · ${assistant.lastTts}")
                 Text("Assistant: ${assistant.phase.name}")
+
+                Text("AI model settings", style = MaterialTheme.typography.titleMedium)
+                Text("These preferences control the configured AI relay; they do not change the local STT or TTS models.")
+                ModelChoice("Requests model", requestsModel) {
+                    requestsModel = it
+                    ProSubscriptionAiPrefs.setRequestsModel(this@AssistantSettingsActivity, it)
+                }
+                ModelChoice("Image and voice questions model", questionsModel) {
+                    questionsModel = it
+                    ProSubscriptionAiPrefs.setQuestionsModel(this@AssistantSettingsActivity, it)
+                }
+                ModelChoice("Tasks model", tasksModel) {
+                    tasksModel = it
+                    ProSubscriptionAiPrefs.setTasksModel(this@AssistantSettingsActivity, it)
+                }
+                OutlinedButton(onClick = ::refreshModels) { Text("Refresh available models") }
+                if (modelCatalogStatus.isNotBlank()) Text(modelCatalogStatus)
+                OutlinedTextField(
+                    value = systemPrompt,
+                    onValueChange = {
+                        systemPrompt = it.take(4000)
+                        ProSubscriptionAiPrefs.setSystemPrompt(this@AssistantSettingsActivity, systemPrompt)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("AI system prompt") },
+                    minLines = 3,
+                )
+                TextButton(onClick = {
+                    ProSubscriptionAiPrefs.resetSystemPrompt(this@AssistantSettingsActivity)
+                    systemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(this@AssistantSettingsActivity)
+                }) { Text("Reset system prompt") }
 
                 Text("Manual ChatGPT handoff", style = MaterialTheme.typography.titleMedium)
                 androidx.compose.foundation.layout.Row {
@@ -151,6 +202,40 @@ class AssistantSettingsActivity : AppCompatActivity() {
                     Text("Last trigger: ${assistant.lastTrigger}")
                     Text("Last STT: ${assistant.lastStt} · Last TTS: ${assistant.lastTts}")
                 }
+            }
+        }
+    }
+
+    @Composable
+    private fun ModelChoice(label: String, selected: String, onSelect: (String) -> Unit) {
+        var expanded by remember { mutableStateOf(false) }
+        Text(label)
+        OutlinedButton(onClick = { expanded = true }) { Text(selected) }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            availableModels.forEach { model ->
+                DropdownMenuItem(
+                    text = { Text(model) },
+                    onClick = {
+                        expanded = false
+                        onSelect(model)
+                    },
+                )
+            }
+        }
+    }
+
+    private fun refreshModels() {
+        modelCatalogStatus = "Loading models…"
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                ProSubscriptionRelayClient.fetchModelCatalog(this@AssistantSettingsActivity)
+            }
+            result.onSuccess { catalog ->
+                availableModels = (listOf("auto") + catalog.models.map { it.id } +
+                    requestsModel + questionsModel + tasksModel).distinct()
+                modelCatalogStatus = "Loaded ${catalog.models.size} models"
+            }.onFailure {
+                modelCatalogStatus = "Could not load models: ${it.message ?: "unknown error"}"
             }
         }
     }

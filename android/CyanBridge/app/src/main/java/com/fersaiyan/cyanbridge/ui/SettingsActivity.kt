@@ -24,11 +24,6 @@ import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionActivity
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionSettingsActivity
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionVerifier
 import com.fersaiyan.cyanbridge.ai.image.ExternalAssistantAutomationSetupActivity
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
@@ -144,16 +139,6 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
     override fun onResume() {
         super.onResume()
         refreshSettingsUi()
-        val shouldVerifyProState = ProSubscriptionPrefs.isSubscribed(this) || (
-            ProSubscriptionPrefs.getProvider(this) != "play_billing" &&
-                ProSubscriptionServerPrefs.getApiToken(this).isNotBlank()
-            )
-        if (shouldVerifyProState) {
-            lifecycleScope.launch(Dispatchers.IO) {
-                ProSubscriptionVerifier.verifyNow(this@SettingsActivity)
-                withContext(Dispatchers.Main) { refreshSettingsUi() }
-            }
-        }
     }
 
     override fun onStart() {
@@ -207,18 +192,11 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
 
     private fun refreshSettingsUi() {
         MemoryVaultBootstrap.ensureInitialized(this)
-        // Update Pro radio button to show "(Free Gemini Live)" for unsubscribed users
-        findViewById<com.google.android.material.radiobutton.MaterialRadioButton>(R.id.rb_provider_pro_subscription)?.let { rb ->
-            val isProActive = ProSubscriptionPrefs.isActiveLocally(this)
-            rb.text = if (isProActive) "Pro" else "Pro (Free Gemini Live)"
-        }
         val meeting = MeetingCapturePrefs.getState(this)
         val memoryMode = MemoryModeManager.getSelectedMode(this)
         val providerType = AutomationPrefs.getProviderType(this)
         val imageQuestionSettings = ImageQuestionPreferences.get(this)
         settingsUiState = SettingsUiState(
-            isProSubscribed = ProSubscriptionPrefs.isActiveLocally(this),
-            proPlan = formatPlan(ProSubscriptionPrefs.getPlan(this)),
             appLanguageLabel = AppLanguagePreferences.selected(this).displayName(this),
             providerType = providerType,
             taskerIntegrationsAvailable = true,
@@ -274,20 +252,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             .show()
     }
 
-    override fun openSubscription() {
-        val target = if (ProSubscriptionPrefs.isActiveLocally(this)) {
-            ProSubscriptionSettingsActivity::class.java
-        } else {
-            ProSubscriptionActivity::class.java
-        }
-        startActivity(Intent(this, target))
-    }
-
     override fun setMemoryMode(mode: MemoryPrivacyMode) {
-        if (!ProSubscriptionPrefs.isActiveLocally(this) && mode != MemoryPrivacyMode.PRIVATE_LOCAL) {
-            Toast.makeText(this, "This memory mode requires a Pro subscription", Toast.LENGTH_SHORT).show()
-            return
-        }
         MemoryModeManager.setSelectedMode(this, mode)
         if (mode != MemoryPrivacyMode.ENCRYPTED_SYNC) {
             lifecycleScope.launch(Dispatchers.IO) {
@@ -320,6 +285,10 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
 
     override fun openLocalModels() {
         startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
+    }
+
+    override fun openAssistantModels() {
+        startActivity(Intent(this, AssistantSettingsActivity::class.java))
     }
 
     override fun openTaskerIntegrations() {
@@ -567,7 +536,6 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
             hint = "Contact email (optional)"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
             filters = arrayOf(InputFilter.LengthFilter(DebugLogSupport.MAX_CONTACT_EMAIL_LENGTH))
-            setText(ProSubscriptionServerPrefs.getAccountEmail(this@SettingsActivity))
             contentDescription = "Contact email for log follow-up"
         }
         val content = LinearLayout(this).apply {
@@ -667,12 +635,6 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
         return Intent(this, ChatThreadActivity::class.java).apply {
             if (openChatId != null) putExtra(ChatThreadActivity.EXTRA_CHAT_ID, openChatId)
         }
-    }
-
-    private fun formatPlan(raw: String): String = when (raw.lowercase(Locale.US)) {
-        "monthly" -> "Monthly"
-        "yearly" -> "Yearly"
-        else -> "Pro"
     }
 
     private fun sectionPreferenceKey(section: SettingsSection): String {

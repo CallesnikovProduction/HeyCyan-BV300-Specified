@@ -208,10 +208,6 @@ class AudioEmulatorHarnessTest {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val apiToken = ProSubscriptionServerPrefs.getApiToken(ctx).trim()
         assumeTrue("No Pro API token linked — run Pro email verification first", apiToken.isNotBlank())
-        val entitlement = com.fersaiyan.cyanbridge.agent.ProSubscriptionVerifier.verifyNow(ctx, strictForTesting = true)
-        assertTrue("An active paid plan is required: ${entitlement.plan}",
-            entitlement.active && entitlement.plan in setOf("cheap", "standard", "max"))
-
         val latch = CountDownLatch(1)
         val outputText = AtomicReference<String>("")
         val errorText = AtomicReference<String>("")

@@ -2,7 +2,6 @@ package com.fersaiyan.cyanbridge.ai.router
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
@@ -13,7 +12,6 @@ object MediaInferenceRoutingPolicy {
         return resolve(
             preferred = LocalAgentPrefs.getProviderType(context),
             localMediaAvailable = hasLocalMultimodalModel(context),
-            proAvailable = ProSubscriptionPrefs.isActiveLocally(context),
             taskerUsesLocalModels = AiProviderPrefs.getProvider(context) == AiProviderType.LOCAL_MODELS,
         )
     }
@@ -21,17 +19,11 @@ object MediaInferenceRoutingPolicy {
     fun resolve(
         preferred: AgentProviderType,
         localMediaAvailable: Boolean,
-        proAvailable: Boolean,
         taskerUsesLocalModels: Boolean = false,
     ): AgentProviderType {
         return when (preferred) {
-            AgentProviderType.LOCAL_AGENT -> when {
-                localMediaAvailable -> AgentProviderType.LOCAL_AGENT
-                proAvailable -> AgentProviderType.PRO_SUBSCRIPTION
-                else -> AgentProviderType.TASKER
-            }
-            // Explicit Pro selection also represents Free Gemini Live for image and voice
-            // questions. Subscription status controls direct Pro access, not this route.
+            AgentProviderType.LOCAL_AGENT -> AgentProviderType.LOCAL_AGENT
+            // This legacy enum value represents the relay provider, not an entitlement.
             AgentProviderType.PRO_SUBSCRIPTION -> AgentProviderType.PRO_SUBSCRIPTION
             AgentProviderType.TASKER -> when {
                 taskerUsesLocalModels && localMediaAvailable -> {

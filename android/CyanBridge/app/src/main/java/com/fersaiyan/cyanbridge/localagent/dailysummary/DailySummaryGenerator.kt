@@ -4,7 +4,6 @@ import android.content.Context
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
@@ -68,7 +67,7 @@ object DailySummaryGenerator {
         return when (AutomationPrefs.getProviderType(context)) {
             AgentProviderType.LOCAL_AGENT -> "local_models"
             AgentProviderType.PRO_SUBSCRIPTION -> "cli_relay"
-            AgentProviderType.TASKER -> if (ProSubscriptionPrefs.isActiveLocally(context)) "cli_relay" else "ai_router"
+            AgentProviderType.TASKER -> "ai_router"
         }
     }
 
@@ -717,29 +716,15 @@ Remember: You MUST output a valid summary. Do not refuse.
 
     private suspend fun generateSummary(context: Context, prompt: String): ProviderResponse {
         val agentType = AutomationPrefs.getProviderType(context)
-        val hasPro = ProSubscriptionPrefs.isActiveLocally(context)
-
         return when (agentType) {
             AgentProviderType.LOCAL_AGENT -> {
                 runCatching { runLocalModels(context, prompt) }
-                    .recoverCatching { localErr ->
-                        if (!hasPro) {
-                            throw IllegalStateException("Local model unavailable (${localErr.message}).")
-                        }
-                        runRelay(context, prompt)
-                    }
                     .getOrThrow()
             }
 
             AgentProviderType.PRO_SUBSCRIPTION -> runRelay(context, prompt)
 
-            AgentProviderType.TASKER -> {
-                if (hasPro) {
-                    runRelay(context, prompt)
-                } else {
-                    runRouterFallback(context, prompt)
-                }
-            }
+            AgentProviderType.TASKER -> runRouterFallback(context, prompt)
         }
     }
 

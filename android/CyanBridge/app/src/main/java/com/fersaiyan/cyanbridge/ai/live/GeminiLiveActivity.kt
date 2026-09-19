@@ -12,7 +12,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.R
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPreferences
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionPromptResolver
 import com.fersaiyan.cyanbridge.ai.vision.ImageQuestionRoute
@@ -28,11 +27,10 @@ import kotlinx.coroutines.withContext
 /**
  * Visible, activity-scoped Gemini Live session.
  *
- * Opening/using other Pro models never starts this Activity or its audio/vision controllers.
+ * Opening other models never starts this Activity or its audio/vision controllers.
  */
 class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     private lateinit var client: GeminiLiveClient
-    private var useRelayForFreeTier = false
     private lateinit var visionController: GeminiLiveVisionController
     private lateinit var status: TextView
     private lateinit var elapsed: TextView
@@ -124,22 +122,10 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
     }
 
     private fun explainAndRequestMicrophone() {
-        // Pro connects directly with a constrained token. Free connects to the authenticated
-        // CyanBridge WebSocket proxy, which retains both Google credentials on Vercel.
-        val isPro = hasPaidPlan()
-        useRelayForFreeTier = !isPro
-        val message = if (isPro) {
-            "Gemini Live (Pro) uses an ephemeral token + GCP Vertex paid route. Your microphone streams " +
-                "directly to Google with a short-lived token (no API key on device). Glasses vision is streamed live."
-        } else {
-            "Gemini Live (Free) routes continuously through the CyanBridge server. Vercel holds the " +
-                "Google API key and ephemeral token while proxying selected speech and images. " +
-                "No Google credential is stored on this device."
-        }
         AlertDialog.Builder(this)
-            .setTitle(if (isPro) "Gemini Live — Pro (direct)" else "Gemini Live — Free (relay)")
+            .setTitle("Gemini Live")
             .setMessage(
-                message + " Compatible streaming glasses contribute visual context. Other Pro models are unaffected.",
+                "Audio and selected images are sent through the configured secure relay. No Google credential is stored on this device.",
             )
             .setPositiveButton("Continue") { _, _ ->
                 if (hasPermission(Manifest.permission.RECORD_AUDIO)) startLive()
@@ -157,9 +143,9 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
             settings = ImageQuestionPreferences.get(this),
             userQuestion = null,
         )
-        visionStatus = if (useRelayForFreeTier) "Glasses vision: relay (server holds key)" else "Glasses vision: preparing"
+        visionStatus = "Glasses vision: relay (server holds key)"
         renderIndicators()
-        status.text = if (useRelayForFreeTier) "Connecting to CyanBridge Live relay" else "Connecting to Gemini Live"
+        status.text = "Connecting to Gemini Live relay"
         visionController.start()
         client.start(language, defaultImageQuestion)
     }
@@ -190,10 +176,6 @@ class GeminiLiveActivity : AppCompatActivity(), GeminiLiveClient.Listener {
             hardwareImageCaptureInProgress.set(false)
         }
     }
-
-    private fun hasPaidPlan(): Boolean =
-        ProSubscriptionPrefs.isActiveLocally(this) &&
-            ProSubscriptionPrefs.getPlan(this).lowercase() in setOf("cheap", "standard", "max")
 
     private fun hasPermission(permission: String): Boolean =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED

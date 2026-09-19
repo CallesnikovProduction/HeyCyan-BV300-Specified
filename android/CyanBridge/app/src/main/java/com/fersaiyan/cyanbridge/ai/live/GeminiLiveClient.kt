@@ -106,7 +106,7 @@ class GeminiLiveClient(
     private var state = GeminiLiveState.IDLE
     private var tokenConfig: LiveTokenConfig? = null
     private val effectiveTokenProvider: GeminiLiveTokenProvider by lazy {
-        tokenProvider ?: DefaultGeminiLiveTokenProvider(appContext, http)
+        tokenProvider ?: DefaultGeminiLiveTokenProvider(appContext)
     }
     // Stored for building the Live setup systemInstruction to match the token's bidiGenerateContentSetup.
     // The token's setup is built server-side via buildLiveSystemInstruction(language, imagePrompt, systemPrompt)

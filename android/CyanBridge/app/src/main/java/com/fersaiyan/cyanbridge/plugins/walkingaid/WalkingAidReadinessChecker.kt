@@ -1,7 +1,6 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid
 
 import android.content.Context
-import com.fersaiyan.cyanbridge.agent.ProSubscriptionPrefs
 import java.io.File
 
 data class WalkingAidReadinessResult(
@@ -9,7 +8,6 @@ data class WalkingAidReadinessResult(
     val yoloReady: Boolean,
     val depthReady: Boolean,
     val llmReady: Boolean,
-    val requiresProForCloud: Boolean,
     val missingDetails: List<String>,
 )
 
@@ -21,8 +19,6 @@ object WalkingAidReadinessChecker {
 
     fun checkReadiness(context: Context): WalkingAidReadinessResult {
         val details = mutableListOf<String>()
-        val isProActive = ProSubscriptionPrefs.isActiveLocally(context)
-        var requiresPro = false
 
         // 1. Local object detection is always the non-blocking safety path. Cloud vision, when
         // selected, only enriches scene history and therefore does not replace the local model.
@@ -53,13 +49,7 @@ object WalkingAidReadinessChecker {
                 details.add("❌ Walking Aid YOLO model is missing ($expected). Download it in this screen.")
             }
         }
-        val cloudDescriptionSelected = WalkingAidPreferences.getImageDescriptionSource(context) == "cloud"
-        val cloudDescriptionReady = !cloudDescriptionSelected || isProActive
-        if (!cloudDescriptionReady) {
-            requiresPro = true
-            details.add("🔒 Optional cloud scene descriptions require active Pro Subscription")
-        }
-        val yoloReady = localYoloReady && cloudDescriptionReady
+        val yoloReady = localYoloReady
 
         // 2. Relative Depth Readiness Check
         val depthEnabled = WalkingAidPreferences.isDepthEnabled(context)
@@ -67,13 +57,7 @@ object WalkingAidReadinessChecker {
         val depthReady = if (!depthEnabled) {
             true
         } else if (depthSource == "cloud") {
-            if (!isProActive) {
-                requiresPro = true
-                details.add("🔒 Cloud Relative Depth requires active Pro Subscription")
-                false
-            } else {
-                true
-            }
+            true
         } else {
             val file = File(context.filesDir, "depth_anything_v2_small.tflite")
             val extFile = File(context.getExternalFilesDir(null), "depth_anything_v2_small.tflite")
@@ -100,7 +84,6 @@ object WalkingAidReadinessChecker {
             yoloReady = yoloReady,
             depthReady = depthReady,
             llmReady = llmReady,
-            requiresProForCloud = requiresPro,
             missingDetails = details,
         )
     }

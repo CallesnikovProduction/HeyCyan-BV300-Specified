@@ -6,8 +6,7 @@ plugins {
 }
 
 configurations.configureEach {
-    // Full protobuf includes GeneratedMessageLite and is required by the MoYoung SDK's
-    // GeneratedMessage classes. Do not package Meta DAT's duplicate javalite runtime.
+    // MoYoung requires the full protobuf-java runtime, not protobuf-javalite.
     exclude group: 'com.google.protobuf', module: 'protobuf-javalite'
     resolutionStrategy {
         force 'androidx.core:core:1.15.0'
@@ -22,15 +21,6 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localProperties.load(new FileInputStream(localPropertiesFile))
-}
-def metaGithubToken = System.getenv("META_GITHUB_TOKEN")
-        ?: System.getenv("GITHUB_TOKEN")
-        ?: localProperties.getProperty("github_token")
-def metaDatEnabled = metaGithubToken != null && !metaGithubToken.trim().isEmpty()
 def testAbi = providers.gradleProperty("testAbi").orNull
 
 android {
@@ -39,8 +29,7 @@ android {
 
     defaultConfig {
         applicationId = "com.fersaiyan.cyanbridge"
-        // Meta DAT declares minSdk 29. Keep the regular build on API 24 if Meta SDK is skipped.
-        minSdk = metaDatEnabled ? 29 : 24
+        minSdk = 24
         targetSdk = 36
         versionCode = 31
         versionName = "2.3.0"
@@ -48,48 +37,10 @@ android {
             ndk.abiFilters.add(testAbi.trim())
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        manifestPlaceholders = [
-                mwdat_application_id: "1057183300587462",
-                mwdat_client_token: "AR|1057183300587462|77e92a3d9f02778279c80f220a2d81a2",
-        ]
-        buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "false"
 
         // Chapter 6: optional transcription API key (do not commit secrets).
         def openAiKey = project.findProperty("OPENAI_API_KEY") ?: ""
         buildConfigField "String", "OPENAI_API_KEY", "\"${openAiKey}\""
-
-        def proCheapSku = project.findProperty("PRO_CHEAP_SKU") ?: "pro_cheap"
-        def proStandardSku = project.findProperty("PRO_STANDARD_SKU") ?: "pro_standard"
-        def proMaxSku = project.findProperty("PRO_MAX_SKU") ?: "pro_max"
-        // Never fall back to the first Play offer. Configure a base plan for each product,
-        // and an offer ID only when that specific promotional offer should be purchased.
-        def proCheapBasePlanId = project.findProperty("PRO_CHEAP_BASE_PLAN_ID") ?: "pro-cheap"
-        def proStandardBasePlanId = project.findProperty("PRO_STANDARD_BASE_PLAN_ID") ?: "pro-standard"
-        def proMaxBasePlanId = project.findProperty("PRO_MAX_BASE_PLAN_ID") ?: "pro-max"
-        def proCheapOfferId = project.findProperty("PRO_CHEAP_OFFER_ID") ?: ""
-        def proStandardOfferId = project.findProperty("PRO_STANDARD_OFFER_ID") ?: ""
-        def proMaxOfferId = project.findProperty("PRO_MAX_OFFER_ID") ?: ""
-        def proMonthlySku = project.findProperty("PRO_MONTHLY_SKU") ?: "pro_monthly"
-        def proYearlySku = project.findProperty("PRO_YEARLY_SKU") ?: "pro_yearly"
-        def proVerifyUrl = project.findProperty("PRO_SUB_VERIFY_URL") ?: ""
-        def webSubscribeUrl = project.findProperty("WEB_SUBSCRIBE_URL") ?: ""
-        def webAllowedCountries = project.findProperty("WEB_SUB_ALLOWED_COUNTRIES") ?: ""
-        def donationUrl = project.findProperty("DONATION_URL") ?: "https://buymeacoffee.com/"
-        buildConfigField "String", "PRO_CHEAP_SKU", "\"${proCheapSku}\""
-        buildConfigField "String", "PRO_STANDARD_SKU", "\"${proStandardSku}\""
-        buildConfigField "String", "PRO_MAX_SKU", "\"${proMaxSku}\""
-        buildConfigField "String", "PRO_CHEAP_BASE_PLAN_ID", "\"${proCheapBasePlanId}\""
-        buildConfigField "String", "PRO_STANDARD_BASE_PLAN_ID", "\"${proStandardBasePlanId}\""
-        buildConfigField "String", "PRO_MAX_BASE_PLAN_ID", "\"${proMaxBasePlanId}\""
-        buildConfigField "String", "PRO_CHEAP_OFFER_ID", "\"${proCheapOfferId}\""
-        buildConfigField "String", "PRO_STANDARD_OFFER_ID", "\"${proStandardOfferId}\""
-        buildConfigField "String", "PRO_MAX_OFFER_ID", "\"${proMaxOfferId}\""
-        buildConfigField "String", "PRO_MONTHLY_SKU", "\"${proMonthlySku}\""
-        buildConfigField "String", "PRO_YEARLY_SKU", "\"${proYearlySku}\""
-        buildConfigField "String", "PRO_SUB_VERIFY_URL", "\"${proVerifyUrl}\""
-        buildConfigField "String", "WEB_SUBSCRIBE_URL", "\"${webSubscribeUrl}\""
-        buildConfigField "String", "WEB_SUB_ALLOWED_COUNTRIES", "\"${webAllowedCountries}\""
-        buildConfigField "String", "DONATION_URL", "\"${donationUrl}\""
 
         vectorDrawables {
             useSupportLibrary = true
@@ -109,11 +60,6 @@ android {
 
     buildTypes {
         debug {
-            manifestPlaceholders = [
-                    mwdat_application_id: "0",
-                    mwdat_client_token: "0",
-            ]
-            buildConfigField "boolean", "META_DAT_DEVELOPER_CONFIGURATION", "true"
         }
         release {
             if (keystorePropertiesFile.exists()) {
@@ -201,7 +147,6 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer-rtsp:1.5.1'
     implementation 'androidx.media3:media3-ui:1.5.1'
     implementation "androidx.security:security-crypto:1.1.0-alpha06"
-    implementation 'com.android.billingclient:billing-ktx:8.1.0'
     implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.0"
     implementation "androidx.work:work-runtime-ktx:2.9.1"
     // LiteRT-LM's Flow streaming API requires the newer coroutine ABI.
@@ -236,16 +181,6 @@ dependencies {
     testImplementation 'org.robolectric:robolectric:4.12.2'
     testImplementation 'androidx.test:core:1.7.0'
     testImplementation "androidx.room:room-testing:$room_version"
-
-    def metaDatVersion = "0.8.0"
-    if (metaDatEnabled) {
-        implementation("com.meta.wearable:mwdat-core:${metaDatVersion}")
-        implementation("com.meta.wearable:mwdat-camera:${metaDatVersion}")
-        implementation("com.meta.wearable:mwdat-display:${metaDatVersion}")
-        implementation("com.meta.wearable:mwdat-mockdevice:${metaDatVersion}")
-    } else {
-        logger.warn("No GitHub package token configured - Meta Wearables DAT SDK dependencies will be skipped.")
-    }
 
     androidTestImplementation 'androidx.test:core-ktx:1.7.0'
     androidTestImplementation 'androidx.test.ext:junit:1.3.0'
