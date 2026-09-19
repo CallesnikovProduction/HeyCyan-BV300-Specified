@@ -146,8 +146,6 @@ import android.net.wifi.p2p.WifiP2pInfo
 import android.net.ConnectivityManager
 import android.net.Network
 import android.provider.OpenableColumns
-import android.media.MediaScannerConnection
-import android.os.Environment
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
@@ -3609,44 +3607,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     /**
-     * Get the glasses' Wi-Fi hardware version via BLE syncDeviceInfo.
-     * Returns empty string if BLE is not connected.
-     */
-    private suspend fun getGlassesWifiHardwareVersion(): String {
-        if (!BleOperateManager.getInstance().isConnected) return ""
-        return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-            LargeDataHandler.getInstance().syncDeviceInfo { _, response ->
-                if (cont.isActive) {
-                    cont.resume(response?.wifiHardwareVersion ?: "") {}
-                }
-            }
-            // Timeout after 5 seconds
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                kotlinx.coroutines.delay(5000)
-                if (cont.isActive) cont.resume("") {}
-            }
-        }
-    }
-
-    /**
-     * Get the glasses' Wi-Fi firmware version via BLE syncDeviceInfo.
-     */
-    private suspend fun getGlassesWifiFirmwareVersion(): String {
-        if (!BleOperateManager.getInstance().isConnected) return ""
-        return kotlinx.coroutines.suspendCancellableCoroutine { cont ->
-            LargeDataHandler.getInstance().syncDeviceInfo { _, response ->
-                if (cont.isActive) {
-                    cont.resume(response?.wifiFirmwareVersion ?: "") {}
-                }
-            }
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                kotlinx.coroutines.delay(5000)
-                if (cont.isActive) cont.resume("") {}
-            }
-        }
-    }
-
-    /**
      * Read the full [DeviceInfoResponse] from the glasses via BLE syncDeviceInfo.
      * Returns null if BLE is not connected or the request times out.
      *
@@ -5542,27 +5502,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return readImageQuestionMetrics(file) != null
     }
 
-    private suspend fun waitForTtsToFinish(timeoutMs: Long) {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        var warned = false
-        while (isTtsSpeaking() && System.currentTimeMillis() < deadline) {
-            if (!warned) {
-                runOnUiThread {
-                    Toast.makeText(this@MainActivity, "Replying…", Toast.LENGTH_SHORT).show()
-                }
-                warned = true
-            }
-            delay(500)
-        }
-        if (isTtsSpeaking()) {
-            Log.w("AIHijack", "TTS still speaking after ${timeoutMs}ms, proceeding anyway")
-        }
-    }
-
-    private fun isTtsSpeaking(): Boolean {
-        return tts?.isSpeaking == true
-    }
-
     private fun isDeviceLockedForAutomation(): Boolean {
         val keyguardManager = getSystemService(KEYGUARD_SERVICE) as? KeyguardManager ?: return false
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -5626,34 +5565,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         pendingImageQuestionOfferSpokenQuestion = false
         cancelParallelAudioQuestion()
-    }
-
-    /**
-     * Copy an image file to DCIM/Camera/ with the Glasses_AI_ naming convention.
-     * Returns the public file path on success, null on failure.
-     */
-    private fun copyImageToPublicCamera(sourcePath: String): String? {
-        val source = File(sourcePath)
-        if (!source.exists() || source.length() == 0L) {
-            Log.w("AIHijack", "Source image missing or empty: $sourcePath")
-            return null
-        }
-        return try {
-            val publicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
-            val cameraDir = File(publicDir, "Camera")
-            if (!cameraDir.exists()) cameraDir.mkdirs()
-            val publicFile = File(cameraDir, "Glasses_AI_${System.currentTimeMillis()}.jpg")
-            source.copyTo(publicFile, overwrite = true)
-            // Scan so MediaStore / Tasker file picker can see it immediately
-            MediaScannerConnection.scanFile(this, arrayOf(publicFile.absolutePath), arrayOf("image/jpeg")) { _, _ ->
-                Log.i("AIHijack", "Scanned to gallery: ${publicFile.absolutePath} (${publicFile.length()} bytes)")
-            }
-            Log.i("AIHijack", "Copied thumbnail to public: ${publicFile.absolutePath}")
-            publicFile.absolutePath
-        } catch (e: Exception) {
-            Log.e("AIHijack", "Failed to copy image to public DCIM: ${e.message}")
-            null
-        }
     }
 
     /** Detect when the vision model couldn't actually see the image (server-side issue). */
@@ -9039,15 +8950,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun setTransferDetailForSession(sessionId: Long, text: String) {
-        if (!isDownloadSessionActive(sessionId)) return
-        runOnUiThread {
-            if (isDownloadSessionActive(sessionId)) {
-                setTransferDetail(text)
-            }
-        }
-    }
-
     private fun formatTransferBytes(bytes: Long): String {
         if (bytes <= 0L) return "0 B"
         val units = arrayOf("B", "KB", "MB", "GB")
@@ -9309,18 +9211,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 startDataDownload()
             }
             .show()
-    }
-
-    private fun getDeviceIpFromBLE(): String? {
-        // Prefer IP detected from BLE notifications, fall back to the
-        // known sample IP if we have not seen one yet.
-        val ipFromBle = bleIpBridge.ip.value
-        if (!ipFromBle.isNullOrEmpty()) {
-            Log.i("DataDownload", "Device IP from BleIpBridge: $ipFromBle")
-            return ipFromBle
-        }
-        // No safe fallback: the glasses IP varies per session.
-        return null
     }
 
     private enum class VendorMediaType(val progressLabel: String) {
@@ -10674,23 +10564,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         } catch (e: Exception) {
             Log.e("LDHMethods", "Failed to introspect LargeDataHandler methods", e)
         }
-    }
-
-    private fun testConnection(deviceIp: String): Boolean {
-        Log.i("DataDownload", "Testing connection to $deviceIp...")
-        val url = URL("http://$deviceIp/files/media.config")
-        var bytesRead = 0
-        val ok = httpGet(url, 5000, 5000) { stream, _ ->
-            val buffer = ByteArray(1024)
-            bytesRead = stream.read(buffer)
-            stream.close()
-        }
-        if (ok) {
-            Log.i("DataDownload", "Connection test successful - read $bytesRead bytes")
-        } else {
-            Log.e("DataDownload", "Connection test failed for $deviceIp")
-        }
-        return ok
     }
 
     private fun onDownloadBleIp(ip: String) {
