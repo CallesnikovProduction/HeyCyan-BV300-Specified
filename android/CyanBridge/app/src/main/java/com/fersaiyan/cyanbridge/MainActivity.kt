@@ -25,10 +25,12 @@ import com.fersaiyan.cyanbridge.shared.settings.CaptureSource
 import com.fersaiyan.cyanbridge.audio.MeetingCapturePrefs
 import com.fersaiyan.cyanbridge.audio.MeetingCaptureService
 import com.fersaiyan.cyanbridge.media.GlassesMediaPrefs
-import com.fersaiyan.cyanbridge.media.SyncedMediaFolder
+import com.fersaiyan.cyanbridge.media.GalleryMediaStore
+import com.fersaiyan.cyanbridge.media.GallerySaveResult
 import com.fersaiyan.cyanbridge.media.VendorAlbumDownloader
 import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
 import com.fersaiyan.cyanbridge.media.OfficialHeyCyanApp
+import com.fersaiyan.cyanbridge.media.OpusOggWrapper
 import com.fersaiyan.cyanbridge.ota.FirmwareClient
 import com.fersaiyan.cyanbridge.ota.InstalledFirmwareVersions
 import com.fersaiyan.cyanbridge.ota.FirmwareResult
@@ -143,9 +145,7 @@ import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.ConnectivityManager
 import android.net.Network
-import android.provider.MediaStore
 import android.provider.OpenableColumns
-import android.content.ContentValues
 import android.media.MediaScannerConnection
 import android.os.Environment
 import org.greenrobot.eventbus.EventBus
@@ -175,7 +175,6 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.net.SocketFactory
 import java.text.SimpleDateFormat
 import java.util.Locale
-import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import androidx.core.content.FileProvider
@@ -596,6 +595,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var eyevueLivePreviewManager: EyevueLivePreviewManager? = null
     private var eyevueLivePreviewUiJob: Job? = null
     private var mediaSessionLease: GlassesSessionLease? = null
+    private val galleryMediaStore by lazy { GalleryMediaStore(applicationContext) }
     private var eyevueMediaJob: Job? = null
     private var eyevueMediaTransport: EyevueWifiTransport? = null
     private var eyevueMediaCancelled = false
@@ -9572,7 +9572,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     ) {
         val request = highQualityImageRequest ?: return
         val latestFileName = jpgFiles.maxWithOrNull(
-            compareBy<String> { parseTakenTimeMillisFromFilename(it) ?: Long.MIN_VALUE }
+            compareBy<String> { galleryMediaStore.parseTakenTimeMillisFromFilename(it) ?: Long.MIN_VALUE }
                 .thenBy { it },
         ) ?: run {
             finishHighQualityImageFailure("No full-resolution JPG was available for this image question.")
@@ -9825,14 +9825,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private suspend fun importVendorMediaFile(file: File, item: VendorMediaItem): Boolean {
-        val takenMs = parseTakenTimeMillisFromFilename(item.fileName) ?: System.currentTimeMillis()
+        val takenMs = galleryMediaStore.parseTakenTimeMillisFromFilename(item.fileName) ?: System.currentTimeMillis()
         return when (item.type) {
             VendorMediaType.PHOTO -> file.inputStream().use { input ->
-                saveJpegToGallery(input, item.fileName, takenMs).success
+                galleryMediaStore.saveJpegToGallery(input, item.fileName, takenMs).success
             }
 
             VendorMediaType.VIDEO -> file.inputStream().use { input ->
-                saveMp4ToGallery(
+                galleryMediaStore.saveMp4ToGallery(
                     input = input,
                     displayName = item.fileName,
                     takenTimeMs = takenMs,
@@ -9842,8 +9842,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             VendorMediaType.AUDIO -> {
                 val rawBytes = runCatching { file.readBytes() }.getOrNull() ?: return false
-                val wrapped = wrapOpusIfNeeded(rawBytes)
-                val saved = saveOpusToLibrary(
+                val wrapped = OpusOggWrapper.wrapIfNeeded(rawBytes)
+                val saved = galleryMediaStore.saveOpusToLibrary(
                     payloadBytes = wrapped.first,
                     rawBytesSize = rawBytes.size,
                     payloadNote = wrapped.second,
@@ -10075,8 +10075,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             var saved: GallerySaveResult? = null
             httpGet(URL(url), 10000, 30000) { stream, _ ->
-                val takenMs = parseTakenTimeMillisFromFilename(fileName) ?: System.currentTimeMillis()
-                saved = saveJpegToGallery(stream, fileName, takenMs)
+                val takenMs = galleryMediaStore.parseTakenTimeMillisFromFilename(fileName) ?: System.currentTimeMillis()
+                saved = galleryMediaStore.saveJpegToGallery(stream, fileName, takenMs)
             }
 
             val savedResult = saved
@@ -10105,8 +10105,8 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             var saved: GallerySaveResult? = null
             val startedAtMs = System.currentTimeMillis()
             httpGet(URL(url), 15000, 180000) { stream, contentLength ->
-                val takenMs = parseTakenTimeMillisFromFilename(fileName) ?: System.currentTimeMillis()
-                saved = saveMp4ToGallery(stream, fileName, takenMs, contentLength) { bytesCopied, totalBytes ->
+                val takenMs = galleryMediaStore.parseTakenTimeMillisFromFilename(fileName) ?: System.currentTimeMillis()
+                saved = galleryMediaStore.saveMp4ToGallery(stream, fileName, takenMs, contentLength) { bytesCopied, totalBytes ->
                     maybeReportFileProgress(
                         sessionId = sessionId,
                         mediaType = "video",
@@ -10145,14 +10145,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             var payloadBytes: ByteArray? = null
             var rawBytesSize = 0
             var payloadNote = "raw"
-            val takenMs = parseTakenTimeMillisFromFilename(fileName) ?: System.currentTimeMillis()
+            val takenMs = galleryMediaStore.parseTakenTimeMillisFromFilename(fileName) ?: System.currentTimeMillis()
             httpGet(URL(url), 15000, 120000) { stream, _ ->
                 val rawBytes = readAllBytes(stream)
                 rawBytesSize = rawBytes.size
-                val wrapped = wrapOpusIfNeeded(rawBytes)
+                val wrapped = OpusOggWrapper.wrapIfNeeded(rawBytes)
                 payloadBytes = wrapped.first
                 payloadNote = wrapped.second
-                saved = saveOpusToLibrary(
+                saved = galleryMediaStore.saveOpusToLibrary(
                     payloadBytes = wrapped.first,
                     rawBytesSize = rawBytes.size,
                     payloadNote = wrapped.second,
@@ -10197,213 +10197,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
     
-    private data class GallerySaveResult(
-        val success: Boolean,
-        val uri: String?,
-        val bytes: Long,
-    )
-
-    private fun parseTakenTimeMillisFromFilename(fileName: String): Long? {
-        // The glasses filenames look like: yyyyMMddHHmmssSSS?.jpg
-        // Example: 20260127095159018.jpg
-        val digits = fileName.takeWhile { it.isDigit() }
-        if (digits.length < 14) return null
-
-        return try {
-            val base = digits.substring(0, 14)
-            val sdf = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
-            val baseDate = sdf.parse(base) ?: return null
-            val msPart = digits.substring(14).take(3)
-            val extraMs = msPart.toIntOrNull() ?: 0
-            baseDate.time + extraMs
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun saveJpegToGallery(input: InputStream, displayName: String, takenTimeMs: Long): GallerySaveResult {
-        return try {
-            val resolver = contentResolver
-
-            val values = ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, displayName)
-                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                put(MediaStore.Images.Media.DATE_TAKEN, takenTimeMs)
-                put(MediaStore.Images.Media.DATE_ADDED, takenTimeMs / 1000)
-                put(MediaStore.Images.Media.DATE_MODIFIED, takenTimeMs / 1000)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.Images.Media.RELATIVE_PATH, SyncedMediaFolder.relativePath)
-                    put(MediaStore.Images.Media.IS_PENDING, 1)
-                }
-            }
-
-            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                ?: return GallerySaveResult(false, null, 0)
-
-            var bytes = 0L
-            try {
-                resolver.openOutputStream(uri, "w")?.use { out ->
-                    val buffer = ByteArray(8 * 1024)
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read <= 0) break
-                        out.write(buffer, 0, read)
-                        bytes += read
-                    }
-                    out.flush()
-                } ?: run {
-                    resolver.delete(uri, null, null)
-                    return GallerySaveResult(false, null, bytes)
-                }
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val done = ContentValues().apply { put(MediaStore.Images.Media.IS_PENDING, 0) }
-                    resolver.update(uri, done, null, null)
-                } else {
-                    // Pre-Android 10: some galleries need an explicit media scan.
-                    MediaScannerConnection.scanFile(
-                        this,
-                        arrayOf(uri.toString()),
-                        arrayOf("image/jpeg"),
-                        null
-                    )
-                }
-
-                GallerySaveResult(true, uri.toString(), bytes)
-            } catch (e: Exception) {
-                resolver.delete(uri, null, null)
-                Log.e("DataDownload", "Gallery write failed for $displayName: ${e.message}", e)
-                GallerySaveResult(false, uri.toString(), bytes)
-            }
-        } catch (e: Exception) {
-            Log.e("DataDownload", "saveJpegToGallery failed for $displayName: ${e.message}", e)
-            GallerySaveResult(false, null, 0)
-        }
-    }
-
-    private fun saveMp4ToGallery(
-        input: InputStream,
-        displayName: String,
-        takenTimeMs: Long,
-        contentLength: Long,
-        onBytesCopied: ((Long, Long) -> Unit)? = null,
-    ): GallerySaveResult {
-        return try {
-            val resolver = contentResolver
-
-            val values = ContentValues().apply {
-                put(MediaStore.Video.Media.DISPLAY_NAME, displayName)
-                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-                put(MediaStore.Video.Media.DATE_TAKEN, takenTimeMs)
-                put(MediaStore.Video.Media.DATE_ADDED, takenTimeMs / 1000)
-                put(MediaStore.Video.Media.DATE_MODIFIED, takenTimeMs / 1000)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    // Keep videos in the same DCIM/CyanBridge folder as photos.
-                    put(MediaStore.Video.Media.RELATIVE_PATH, SyncedMediaFolder.relativePath)
-                    put(MediaStore.Video.Media.IS_PENDING, 1)
-                }
-            }
-
-            val uri = resolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
-                ?: return GallerySaveResult(false, null, 0)
-
-            var bytes = 0L
-            try {
-                resolver.openOutputStream(uri, "w")?.use { out ->
-                    val buffer = ByteArray(128 * 1024)
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read <= 0) break
-                        out.write(buffer, 0, read)
-                        bytes += read
-                        onBytesCopied?.invoke(bytes, contentLength)
-                    }
-                    out.flush()
-                } ?: run {
-                    resolver.delete(uri, null, null)
-                    return GallerySaveResult(false, null, bytes)
-                }
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
-                    resolver.update(uri, done, null, null)
-                }
-
-                GallerySaveResult(true, uri.toString(), bytes)
-            } catch (e: Exception) {
-                resolver.delete(uri, null, null)
-                Log.e("DataDownload", "Gallery video write failed for $displayName: ${e.message}", e)
-                GallerySaveResult(false, uri.toString(), bytes)
-            }
-        } catch (e: Exception) {
-            Log.e("DataDownload", "saveMp4ToGallery failed for $displayName: ${e.message}", e)
-            GallerySaveResult(false, null, 0)
-        }
-    }
-
-    private fun saveOpusToLibrary(
-        payloadBytes: ByteArray,
-        rawBytesSize: Int,
-        payloadNote: String,
-        displayName: String,
-        takenTimeMs: Long,
-    ): GallerySaveResult {
-        return try {
-            val resolver = contentResolver
-
-            val headHex = bytesToHex(payloadBytes, 24)
-            Log.i(
-                "DataDownload",
-                "OPUS save: name=$displayName, raw=$rawBytesSize bytes, out=${payloadBytes.size} bytes, mode=$payloadNote, head=$headHex"
-            )
-
-            val title = displayName.substringBeforeLast('.', displayName)
-            val values = ContentValues().apply {
-                put(MediaStore.Audio.Media.DISPLAY_NAME, displayName)
-                // Use Ogg/Opus container when possible.
-                put(MediaStore.Audio.Media.MIME_TYPE, "audio/ogg")
-                put(MediaStore.Audio.Media.TITLE, title)
-                put(MediaStore.Audio.Media.IS_MUSIC, 0)
-                put(MediaStore.MediaColumns.DATE_ADDED, takenTimeMs / 1000)
-                put(MediaStore.MediaColumns.DATE_MODIFIED, takenTimeMs / 1000)
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    // Keep alongside photos/videos per your preference (DCIM/CyanBridge).
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, SyncedMediaFolder.relativePath)
-                    put(MediaStore.MediaColumns.IS_PENDING, 1)
-                }
-            }
-
-            val uri = resolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
-                ?: return GallerySaveResult(false, null, 0)
-
-            var bytes = 0L
-            try {
-                resolver.openOutputStream(uri, "w")?.use { out ->
-                    out.write(payloadBytes)
-                    bytes = payloadBytes.size.toLong()
-                    out.flush()
-                } ?: run {
-                    resolver.delete(uri, null, null)
-                    return GallerySaveResult(false, null, bytes)
-                }
-
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val done = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
-                    resolver.update(uri, done, null, null)
-                }
-
-                GallerySaveResult(true, uri.toString(), bytes)
-            } catch (e: Exception) {
-                resolver.delete(uri, null, null)
-                Log.e("DataDownload", "Gallery audio write failed for $displayName: ${e.message}", e)
-                GallerySaveResult(false, uri.toString(), bytes)
-            }
-        } catch (e: Exception) {
-            Log.e("DataDownload", "saveOpusToLibrary failed for $displayName: ${e.message}", e)
-            GallerySaveResult(false, null, 0)
-        }
-    }
 
     private fun readAllBytes(input: InputStream): ByteArray {
         val bos = ByteArrayOutputStream()
@@ -10416,276 +10209,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return bos.toByteArray()
     }
 
-    private fun bytesToHex(bytes: ByteArray, max: Int): String {
-        val n = minOf(bytes.size, max)
-        val sb = StringBuilder(n * 2)
-        for (i in 0 until n) {
-            sb.append(String.format("%02x", bytes[i]))
-        }
-        if (bytes.size > max) sb.append("...")
-        return sb.toString()
-    }
 
-    private fun wrapOpusIfNeeded(raw: ByteArray): Pair<ByteArray, String> {
-        if (raw.size >= 4 && raw[0].toInt() == 'O'.code && raw[1].toInt() == 'g'.code && raw[2].toInt() == 'g'.code && raw[3].toInt() == 'S'.code) {
-            return raw to "ogg-already"
-        }
-
-        // Try to interpret the file as a sequence of length-prefixed Opus packets and wrap
-        // them into a proper Ogg/Opus container so standard players (VLC) can open it.
-        val packets = parseLengthPrefixedPackets(raw, littleEndian = true)
-            ?: parseLengthPrefixedPackets(raw, littleEndian = false)
-            ?: parseLengthPrefixedPackets1B(raw)
-            ?: guessFixedSizePackets(raw)
-
-        if (packets == null || packets.isEmpty()) {
-            // Unknown/proprietary layout (the official app decodes these with jl_opus).
-            return raw to "raw-unwrapped"
-        }
-
-        return try {
-            val ogg = buildOggOpusFromPackets(packets, packetDurationMs = 40)
-            ogg to "wrapped packets=${packets.size}"
-        } catch (e: Exception) {
-            Log.w("DataDownload", "Failed to wrap opus into ogg: ${e.message}")
-            raw to "raw-unwrapped"
-        }
-    }
-
-    private fun parseLengthPrefixedPackets(raw: ByteArray, littleEndian: Boolean): List<ByteArray>? {
-        // Heuristic: repeated [u16 len][len bytes]...
-        var i = 0
-        val out = ArrayList<ByteArray>()
-        while (i + 2 <= raw.size) {
-            val b0 = raw[i].toInt() and 0xFF
-            val b1 = raw[i + 1].toInt() and 0xFF
-            val len = if (littleEndian) (b0 or (b1 shl 8)) else ((b0 shl 8) or b1)
-            i += 2
-            if (len <= 0 || len > 2000) return null
-            if (i + len > raw.size) return null
-            out.add(raw.copyOfRange(i, i + len))
-            i += len
-        }
-        if (i != raw.size) return null
-        // Require a few packets so we don't mis-detect.
-        return if (out.size >= 3) out else null
-    }
-
-    private fun parseLengthPrefixedPackets1B(raw: ByteArray): List<ByteArray>? {
-        // Heuristic: repeated [u8 len][len bytes]...
-        var i = 0
-        val out = ArrayList<ByteArray>()
-        while (i + 1 <= raw.size) {
-            val len = raw[i].toInt() and 0xFF
-            i += 1
-            if (len <= 0 || len > 255) return null
-            if (i + len > raw.size) return null
-            out.add(raw.copyOfRange(i, i + len))
-            i += len
-        }
-        if (i != raw.size) return null
-        return if (out.size >= 3) out else null
-    }
-
-    private fun guessFixedSizePackets(raw: ByteArray): List<ByteArray>? {
-        // Last-resort heuristic: some devices store raw Opus packets back-to-back with a
-        // fixed packet byte size. Try a few common sizes.
-        if (raw.isEmpty()) return null
-        // 40 bytes is especially common for these glasses (official app uses packetSize=40).
-        val candidates = intArrayOf(40, 60, 80, 100, 120, 160, 200, 240, 320)
-        for (size in candidates) {
-            if (size <= 0) continue
-            if (raw.size % size != 0) continue
-            val count = raw.size / size
-            if (count < 5) continue
-            val out = ArrayList<ByteArray>(count)
-            var i = 0
-            while (i < raw.size) {
-                out.add(raw.copyOfRange(i, i + size))
-                i += size
-            }
-            return out
-        }
-        return null
-    }
-
-    private fun buildOggOpusFromPackets(packets: List<ByteArray>, packetDurationMs: Int): ByteArray {
-        // Ogg/Opus expects OpusHead + OpusTags packets before audio packets.
-        val serial = SecureRandom().nextInt()
-        var seq = 0
-        var granulePos: Long = 0
-
-        val out = ByteArrayOutputStream()
-
-        val opusHead = buildOpusHead(channels = 1, preSkip = 0)
-        val opusTags = buildOpusTags(vendor = "CyanBridge")
-
-        // Header pages
-        writeOggPage(out, serial, seq++, granulePosition = 0, headerType = 0x02, packets = listOf(opusHead))
-        writeOggPage(out, serial, seq++, granulePosition = 0, headerType = 0x00, packets = listOf(opusTags))
-
-        // Audio pages
-        val samplesPerPacket48k = (packetDurationMs * 48_000L) / 1000L
-        val maxSegments = 255
-        var idx = 0
-        while (idx < packets.size) {
-            val pagePackets = ArrayList<ByteArray>()
-            var segCount = 0
-            var localGranule = granulePos
-
-            while (idx < packets.size) {
-                val p = packets[idx]
-                var neededSeg = (p.size + 254) / 255
-                if (p.size % 255 == 0) neededSeg += 1
-                if (segCount + neededSeg > maxSegments) break
-                pagePackets.add(p)
-                segCount += neededSeg
-                localGranule += samplesPerPacket48k
-                idx++
-            }
-
-            granulePos = localGranule
-            val isLast = idx >= packets.size
-            val headerType = if (isLast) 0x04 else 0x00
-            writeOggPage(out, serial, seq++, granulePosition = granulePos, headerType = headerType, packets = pagePackets)
-        }
-
-        return out.toByteArray()
-    }
-
-    private fun buildOpusHead(channels: Int, preSkip: Int): ByteArray {
-        // OpusHead (19 bytes)
-        val b = ByteArrayOutputStream()
-        b.write("OpusHead".toByteArray(Charsets.US_ASCII))
-        b.write(1) // version
-        b.write(channels and 0xFF)
-        // pre-skip LE16
-        b.write(preSkip and 0xFF)
-        b.write((preSkip shr 8) and 0xFF)
-        // input sample rate LE32 (Opus is coded at 48k internally)
-        val sr = 48_000
-        b.write(sr and 0xFF)
-        b.write((sr shr 8) and 0xFF)
-        b.write((sr shr 16) and 0xFF)
-        b.write((sr shr 24) and 0xFF)
-        // output gain LE16
-        b.write(0)
-        b.write(0)
-        // channel mapping family (0 = mono/stereo)
-        b.write(0)
-        return b.toByteArray()
-    }
-
-    private fun buildOpusTags(vendor: String): ByteArray {
-        val vendorBytes = vendor.toByteArray(Charsets.UTF_8)
-        val b = ByteArrayOutputStream()
-        b.write("OpusTags".toByteArray(Charsets.US_ASCII))
-        writeLe32(b, vendorBytes.size)
-        b.write(vendorBytes)
-        // user comment list length = 0
-        writeLe32(b, 0)
-        return b.toByteArray()
-    }
-
-    private fun writeLe32(out: ByteArrayOutputStream, v: Int) {
-        out.write(v and 0xFF)
-        out.write((v shr 8) and 0xFF)
-        out.write((v shr 16) and 0xFF)
-        out.write((v shr 24) and 0xFF)
-    }
-
-    private fun writeOggPage(
-        out: ByteArrayOutputStream,
-        serial: Int,
-        seq: Int,
-        granulePosition: Long,
-        headerType: Int,
-        packets: List<ByteArray>,
-    ) {
-        val segmentTable = ByteArrayOutputStream()
-        val payload = ByteArrayOutputStream()
-
-        for (p in packets) {
-            var remaining = p.size
-            var offset = 0
-            while (remaining > 0) {
-                val seg = minOf(255, remaining)
-                segmentTable.write(seg)
-                payload.write(p, offset, seg)
-                offset += seg
-                remaining -= seg
-            }
-            if (p.size % 255 == 0) {
-                // Lacing: 255 indicates continuation; add 0 to terminate packet exactly on boundary.
-                segmentTable.write(0)
-            }
-        }
-
-        val segBytes = segmentTable.toByteArray()
-        if (segBytes.size > 255) {
-            throw IllegalStateException("Ogg page has too many segments: ${segBytes.size}")
-        }
-        val payloadBytes = payload.toByteArray()
-
-        val header = ByteArrayOutputStream()
-        header.write("OggS".toByteArray(Charsets.US_ASCII))
-        header.write(0) // version
-        header.write(headerType and 0xFF)
-        writeLe64(header, granulePosition)
-        writeLe32(header, serial)
-        writeLe32(header, seq)
-        // checksum placeholder
-        writeLe32(header, 0)
-        header.write(segBytes.size)
-        header.write(segBytes)
-
-        val pageBytes = header.toByteArray() + payloadBytes
-        val crc = oggCrc(pageBytes)
-
-        // Patch checksum at byte offset 22 (from start of OggS)
-        pageBytes[22] = (crc and 0xFF).toByte()
-        pageBytes[23] = ((crc shr 8) and 0xFF).toByte()
-        pageBytes[24] = ((crc shr 16) and 0xFF).toByte()
-        pageBytes[25] = ((crc shr 24) and 0xFF).toByte()
-
-        out.write(pageBytes)
-    }
-
-    private fun writeLe64(out: ByteArrayOutputStream, v: Long) {
-        out.write((v and 0xFF).toInt())
-        out.write(((v shr 8) and 0xFF).toInt())
-        out.write(((v shr 16) and 0xFF).toInt())
-        out.write(((v shr 24) and 0xFF).toInt())
-        out.write(((v shr 32) and 0xFF).toInt())
-        out.write(((v shr 40) and 0xFF).toInt())
-        out.write(((v shr 48) and 0xFF).toInt())
-        out.write(((v shr 56) and 0xFF).toInt())
-    }
-
-    private val oggCrcTable: IntArray = run {
-        val table = IntArray(256)
-        for (i in 0 until 256) {
-            var r = i shl 24
-            for (j in 0 until 8) {
-                r = if ((r and 0x80000000.toInt()) != 0) {
-                    (r shl 1) xor 0x04C11DB7
-                } else {
-                    r shl 1
-                }
-            }
-            table[i] = r
-        }
-        table
-    }
-
-    private fun oggCrc(data: ByteArray): Int {
-        var crc = 0
-        for (b in data) {
-            val idx = ((crc ushr 24) xor (b.toInt() and 0xFF)) and 0xFF
-            crc = (crc shl 8) xor oggCrcTable[idx]
-        }
-        return crc
-    }
 
     private fun sendExitTransferModeIfRequested() {
         if (!downloadExitTransferRequested) return
