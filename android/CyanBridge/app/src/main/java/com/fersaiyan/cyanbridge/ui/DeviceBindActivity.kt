@@ -11,23 +11,16 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.devices.DeviceClassifier
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
-import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
-import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
-import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
-import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsProtocol
 import com.fersaiyan.cyanbridge.devices.ScannedDevice
 import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsSignal
 import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
@@ -37,34 +30,14 @@ import com.fersaiyan.cyanbridge.shared.ui.DeviceBindScreen
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import com.hjq.permissions.OnPermissionCallback
 import com.hjq.permissions.XXPermissions
-import com.oudmon.ble.base.bluetooth.BleOperateManager
-import com.oudmon.ble.base.communication.LargeDataHandler
-import com.oudmon.ble.base.communication.utils.ByteUtil
 import com.oudmon.ble.base.scan.BleScannerHelper
 import com.oudmon.ble.base.scan.ScanRecord
 import com.oudmon.ble.base.scan.ScanWrapperCallback
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
 
-internal fun consumerProtocolProbeOrder(scanHint: DeviceClass): List<DeviceClass> = when (scanHint) {
-    DeviceClass.MOYOUNG_W620 -> listOf(DeviceClass.MOYOUNG_W620, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.HEY_CYAN)
-    DeviceClass.EYEVUE -> listOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MOYOUNG_W620, DeviceClass.HEY_CYAN)
-    DeviceClass.TUNEBUDS -> listOf(DeviceClass.TUNEBUDS, DeviceClass.EYEVUE, DeviceClass.MOYOUNG_W620, DeviceClass.HEY_CYAN)
-    DeviceClass.HEY_CYAN -> listOf(DeviceClass.HEY_CYAN, DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MOYOUNG_W620)
-    else -> listOf(DeviceClass.EYEVUE, DeviceClass.TUNEBUDS, DeviceClass.MOYOUNG_W620, DeviceClass.HEY_CYAN)
-}
-
 class DeviceBindActivity : BaseActivity() {
-    private var scanSize = 0
     private val scanTimeout = ScanTimeout()
     private val handler = Handler(Looper.getMainLooper())
     private val deviceList = mutableListOf<ScannedDevice>()
@@ -73,11 +46,8 @@ class DeviceBindActivity : BaseActivity() {
     private var scannedDevices by mutableStateOf<List<ScannedDevice>>(emptyList())
     private var isScanning by mutableStateOf(false)
     private var connectingDevice by mutableStateOf<ScannedDevice?>(null)
-    private var selectedDeviceClass by mutableStateOf(DeviceClass.HEY_CYAN)
     private var initialScanStarted = false
     private var lastDeviceListPublishAtMs = 0L
-    private var protocolDetectionActive = false
-    private var protocolDetectionJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -90,21 +60,16 @@ class DeviceBindActivity : BaseActivity() {
                     devices = scannedDevices.map { it.toShared() },
                     isScanning = isScanning,
                     connectingDevice = connectingDevice?.toShared(),
-                    selectedClass = selectedDeviceClass,
                     onScan = ::startScan,
-                    onPairMetaGlasses = ::openMetaPairing,
                     onSelectDevice = { sharedDevice ->
                         val device = deviceList.firstOrNull {
                             it.macAddress.equals(sharedDevice.macAddress, ignoreCase = true)
                         }
                         if (device != null) {
                             connectingDevice = device
-                            selectedDeviceClass = pairingChoiceFor(device.effectiveSelectedClass())
                         }
                     },
-                    onSelectedClassChange = { selectedDeviceClass = it },
                     onConfirmConnection = ::confirmConnection,
-                    onConfirmManualProtocol = ::confirmManualConsumerProtocol,
                     onDismissConnection = { connectingDevice = null },
                     onBack = ::finish,
                 )
@@ -123,28 +88,10 @@ class DeviceBindActivity : BaseActivity() {
     // BaseActivity invokes this after Compose installs its host view; no ViewBinding remains.
     override fun setupViews() = Unit
 
-    /** Meta wearables are registered through DAT, never through the Oudmon Bluetooth connector. */
-    private fun openMetaPairing() {
-        stopScan()
-        DeviceProfileStore.saveLastSelected(
-            this,
-            DeviceProfile(
-                macAddress = META_DAT_PROFILE_ID,
-                advertisedName = "Meta glasses",
-                detectedClass = DeviceClass.META_RAYBAN,
-                selectedClass = DeviceClass.META_RAYBAN,
-                userOverridden = false,
-            ),
-        )
-        startActivity(Intent(this, MetaPairingActivity::class.java))
-    }
-
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun onMessageEvent(messageEvent: BluetoothEvent) {
         Log.i(TAG, "onMessageEvent: ${messageEvent.connect}")
-        // During protocol detection the connection event is only the first half of the HeyCyan
-        // probe; wait for an actual command response before deciding which dashboard to use.
-        if (messageEvent.connect && !protocolDetectionActive) finish()
+        if (messageEvent.connect) finish()
     }
 
     @SuppressLint("MissingPermission")
@@ -165,7 +112,6 @@ class DeviceBindActivity : BaseActivity() {
             startActivityForResult(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), REQUEST_ENABLE_BLUETOOTH)
             return
         }
-        scanSize = 0
         isScanning = true
         DiagnosticsStore.scanner("SCANNING")
         BleScannerHelper.getInstance().scanDevice(this, null, bleScanCallback)
@@ -186,372 +132,33 @@ class DeviceBindActivity : BaseActivity() {
             requestBluetoothPermission(this, PermissionCallback())
             return
         }
-
-        // HEY_CYAN is now a sentinel for the manual consumer picker. If we somehow
-        // reach here with HEY_CYAN (e.g. direct call without the second dialog),
-        // fall back to an explicit HeyCyan manual connect rather than auto probing.
-        if (selectedDeviceClass == DeviceClass.HEY_CYAN ||
-            selectedDeviceClass == DeviceClass.EYEVUE ||
-            selectedDeviceClass == DeviceClass.TUNEBUDS ||
-            selectedDeviceClass == DeviceClass.MOYOUNG_W620 ||
-            selectedDeviceClass == DeviceClass.UNKNOWN
+        val rememberedAddress = DeviceProfileStore.loadLastSelected(this)
+            ?.takeIf { it.selectedClass == DeviceClass.MOYOUNG_W620 }?.macAddress
+        if (!Bv300PairingPolicy.isCandidate(
+                device.detectedClass, device.advertisedName, device.connectionAddress, rememberedAddress,
+            )
         ) {
-            // Should normally be handled via confirmManualConsumerProtocol after the
-            // second picker. Keep a safe fallback to HeyCyan so we never auto-probe.
-            val fallback = when (selectedDeviceClass) {
-                DeviceClass.EYEVUE,
-                DeviceClass.TUNEBUDS,
-                DeviceClass.MOYOUNG_W620,
-                -> selectedDeviceClass
-                else -> DeviceClass.HEY_CYAN
-            }
-            confirmManualConsumerProtocol(fallback)
+            Toast.makeText(this, "This is not a recognized BV300 device", Toast.LENGTH_LONG).show()
+            connectingDevice = null
             return
         }
 
         connectingDevice = null
         stopScan()
-        DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "Connection requested", selectedDeviceClass.name)
+        DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "BV300 connection requested")
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
-
-        when (selectedDeviceClass) {
-            DeviceClass.META_RAYBAN -> {
-                // Selecting Meta in the normal scan flow now routes directly into DAT pairing.
-                openMetaPairing()
-            }
-
-            DeviceClass.MEIZU_MYVU -> {
-                saveSelectedProfile(device, DeviceClass.MEIZU_MYVU, userOverridden = true)
-                connectMeizuMyvu(device)
-            }
-
-            DeviceClass.GENERIC_AUDIO -> {
-                saveSelectedProfile(device, DeviceClass.GENERIC_AUDIO, userOverridden = true)
-                Toast.makeText(this, "Audio device selected.", Toast.LENGTH_SHORT).show()
-                finish()
-            }
-
-            else -> {
-                // Should not happen; pairingChoices only exposes the above plus the
-                // HEY_CYAN sentinel handled above.
-                Toast.makeText(this, "Unknown device type.", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /**
-     * Manual consumer-glasses path: the user explicitly chose HeyCyan / EyeVue /
-     * TuneBuds / MoYoung in the second picker. Persist that exact class
-     * (userOverridden = true) so re-pairing is not required to change it, apply
-     * maximum capture defaults, and connect via the concrete manager.
-     * Restored from the pre-auto-detection manual flow (commit ab5b683^) and
-     * extended to include MoYoung / W620.
-     */
-    private fun confirmManualConsumerProtocol(concreteClass: DeviceClass) {
-        val device = connectingDevice ?: return
-        if (!hasBluetooth(this)) {
-            Toast.makeText(this, "Bluetooth permission is required to connect", Toast.LENGTH_SHORT).show()
-            requestBluetoothPermission(this, PermissionCallback())
-            return
-        }
-        val normalized = when (concreteClass) {
-            DeviceClass.HEY_CYAN,
-            DeviceClass.EYEVUE,
-            DeviceClass.TUNEBUDS,
-            DeviceClass.MOYOUNG_W620,
-            -> concreteClass
-            else -> DeviceClass.HEY_CYAN
-        }
-        connectingDevice = null
-        stopScan()
-        DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "Connection requested", normalized.name)
-        AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
-        saveSelectedProfile(device, normalized, userOverridden = true)
-        // Apply device-specific maximum capture defaults (HeyCyan video/audio,
-        // EyeVue recording duration). TuneBuds/MoYoung have no writable duration.
-        lifecycleScope.launch { applyMaximumCaptureDefaults(normalized) }
-        when (normalized) {
-            DeviceClass.HEY_CYAN -> {
-                BleOperateManager.getInstance().connectDirectly(device.macAddress)
-                Toast.makeText(this@DeviceBindActivity, "Connecting as HeyCyan.", Toast.LENGTH_SHORT).show()
-                // HeyCyan connection completion is observed via BluetoothEvent;
-                // finish now to return to dashboard where AutoPair/status will follow.
-                finish()
-            }
-
-            DeviceClass.EYEVUE -> {
-                EyevueManager.getInstance(this).connect(device.macAddress, device.advertisedName)
-                Toast.makeText(this@DeviceBindActivity, "Connecting to EyeVue.", Toast.LENGTH_SHORT).show()
-                finish()
-            }
-
-            DeviceClass.TUNEBUDS -> {
-                TuneBudsManager.getInstance(this).connect(device.connectionAddress, device.advertisedName)
-                Toast.makeText(this@DeviceBindActivity, "Connecting to TuneBuds.", Toast.LENGTH_SHORT).show()
-                finish()
-            }
-
-            DeviceClass.MOYOUNG_W620 -> {
-                MoyoungW620Manager.getInstance(this).connect(device.macAddress, device.advertisedName)
-                Toast.makeText(this@DeviceBindActivity, "Connecting as MoYoung / W620.", Toast.LENGTH_SHORT).show()
-                finish()
-            }
-
-            else -> Unit
-        }
-    }
-
-    /**
-     * Legacy auto-detection path kept for fallback only. The normal UI now uses
-     * manual selection via confirmManualConsumerProtocol. This probe sequence is
-     * no longer invoked from the pairing dialog; it is retained only if
-     * confirmConnection is reached with an unknown class and for diagnostic use.
-     */
-    private fun detectAndConnectConsumerGlasses(device: ScannedDevice) {
-        if (protocolDetectionJob?.isActive == true) return
-        protocolDetectionActive = true
-        Toast.makeText(this, "Detecting glasses protocol…", Toast.LENGTH_SHORT).show()
-        protocolDetectionJob = lifecycleScope.launch {
-            try {
-                val detectedClass = detectConsumerProtocol(device)
-                if (detectedClass == null) {
-                    Toast.makeText(
-                        this@DeviceBindActivity,
-                        "Could not identify a compatible glasses protocol. Check that the glasses are available and try again.",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    return@launch
-                }
-
-                saveSelectedProfile(device, detectedClass, userOverridden = false)
-                applyMaximumCaptureDefaults(detectedClass)
-                Toast.makeText(
-                    this@DeviceBindActivity,
-                    "Connected as ${detectedClass.displayName()}",
-                    Toast.LENGTH_SHORT,
-                ).show()
-                finish()
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Throwable) {
-                Log.e(TAG, "Consumer protocol detection failed", error)
-                Toast.makeText(
-                    this@DeviceBindActivity,
-                    error.message ?: "Could not identify the glasses protocol.",
-                    Toast.LENGTH_LONG,
-                ).show()
-            } finally {
-                protocolDetectionActive = false
-            }
-        }
-    }
-
-    private suspend fun detectConsumerProtocol(device: ScannedDevice): DeviceClass? {
-        val order = consumerProtocolProbeOrder(device.detectedClass)
-        Log.i(TAG, "Consumer protocol probe order=$order scanHint=${device.detectedClass}")
-        for (candidate in order) {
-            val responded = try {
-                when (candidate) {
-                    DeviceClass.EYEVUE -> probeEyevue(device)
-                    DeviceClass.TUNEBUDS -> probeTuneBuds(device)
-                    DeviceClass.MOYOUNG_W620 -> probeMoyoungW620(device)
-                    DeviceClass.HEY_CYAN -> probeHeyCyan(device)
-                    else -> false
-                }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Throwable) {
-                Log.w(TAG, "Consumer protocol probe failed for $candidate", error)
-                false
-            }
-            if (responded) {
-                Log.i(TAG, "Consumer glasses protocol confirmed: $candidate")
-                return candidate
-            }
-            Log.i(TAG, "Consumer glasses protocol did not respond: $candidate")
-        }
-        return null
-    }
-
-    private suspend fun probeEyevue(device: ScannedDevice): Boolean {
-        val manager = EyevueManager.getInstance(this)
-        manager.disconnect()
-        manager.connect(device.macAddress, device.advertisedName)
-        val response = withTimeoutOrNull(EYEVUE_PROBE_TIMEOUT_MS) {
-            manager.state
-                .filter { state ->
-                    state.protocolState == "ERROR" ||
-                        (state.protocolState == "CONNECTED" && (
-                            state.batteryPercent != null ||
-                                state.storageCount != null ||
-                                !state.customer.isNullOrBlank() ||
-                                !state.project.isNullOrBlank()
-                            ))
-                }
-                .first()
-        }
-        val identified = response?.protocolState == "CONNECTED"
-        if (!identified) manager.disconnect()
-        return identified
-    }
-
-    private suspend fun probeTuneBuds(device: ScannedDevice): Boolean {
-        val manager = TuneBudsManager.getInstance(this)
-        manager.disconnect()
-        manager.connect(device.connectionAddress, device.advertisedName)
-        val response = withTimeoutOrNull(TUNEBUDS_PROBE_TIMEOUT_MS) {
-            manager.state
-                .filter { state ->
-                    state.protocolState == "ERROR" ||
-                        (state.protocolState == "CONNECTED" && (
-                            state.batteryPercent != null ||
-                                !state.firmwareVersion.isNullOrBlank() ||
-                                !state.model.isNullOrBlank() ||
-                                state.storage != null
-                            ))
-                }
-                .first()
-        }
-        val identified = response?.protocolState == "CONNECTED"
-        if (!identified) manager.disconnect()
-        return identified
-    }
-
-    private suspend fun probeMoyoungW620(device: ScannedDevice): Boolean =
-        MoyoungW620Manager.getInstance(this).probe(
-            address = device.macAddress,
-            deviceName = device.advertisedName,
-        )
-
-    private suspend fun probeHeyCyan(device: ScannedDevice): Boolean {
-        val batteryResponse = CompletableDeferred<Boolean>()
-        val handler = LargeDataHandler.getInstance()
-        var identified = false
-        runCatching { handler.removeBatteryCallBack(HEY_CYAN_PROBE_CALLBACK) }
-        handler.addBatteryCallBack(HEY_CYAN_PROBE_CALLBACK) { _, response ->
-            if (response != null && !batteryResponse.isCompleted) batteryResponse.complete(true)
-        }
-        return try {
-            BleOperateManager.getInstance().connectDirectly(device.macAddress)
-            val connected = withTimeoutOrNull(HEY_CYAN_CONNECT_TIMEOUT_MS) {
-                while (!BleOperateManager.getInstance().isConnected) delay(100L)
-                true
-            } == true
-            if (!connected) return false
-            handler.syncBattery()
-            identified = withTimeoutOrNull(HEY_CYAN_RESPONSE_TIMEOUT_MS) { batteryResponse.await() } == true
-            identified
-        } finally {
-            runCatching { handler.removeBatteryCallBack(HEY_CYAN_PROBE_CALLBACK) }
-            if (!identified) {
-                runCatching { BleOperateManager.getInstance().disconnect() }
-                delay(250L)
-            }
-        }
-    }
-
-    /**
-     * Remove duration choices from the UI and choose the highest known safe value automatically.
-     * TuneBuds reports video/audio limits as capabilities and has no writable duration command in
-     * its documented protocol, so its normal start commands already run up to those device limits.
-     */
-    private suspend fun applyMaximumCaptureDefaults(deviceClass: DeviceClass) {
-        when (deviceClass) {
-            DeviceClass.HEY_CYAN -> {
-                setHeyCyanCaptureDuration(dataType = 0x02, seconds = HEY_CYAN_MAX_VIDEO_SECONDS)
-                delay(150L)
-                setHeyCyanCaptureDuration(dataType = 0x06, seconds = HEY_CYAN_MAX_AUDIO_SECONDS)
-            }
-
-            DeviceClass.EYEVUE -> {
-                // Decompiled EyeVue settings expose 1/3/5/7/10 minute choices; 10 min is max.
-                EyevueManager.getInstance(this).setRecordingDuration(EYEVUE_MAX_RECORDING_SECONDS)
-            }
-
-            DeviceClass.TUNEBUDS -> {
-                TuneBudsManager.getInstance(this).refreshStatus()
-            }
-
-            DeviceClass.MOYOUNG_W620 -> Unit
-
-            else -> Unit
-        }
-    }
-
-    private fun setHeyCyanCaptureDuration(dataType: Int, seconds: Int) {
-        if (!BleOperateManager.getInstance().isConnected) return
-        val command = byteArrayOf(
-            0x02,
-            dataType.toByte(),
-            0x00,
-            ByteUtil.loword(seconds).toByte(),
-            ByteUtil.hiword(seconds).toByte(),
-        )
-        LargeDataHandler.getInstance().glassesControl(command) { _, response ->
-            Log.i(TAG, "Applied HeyCyan maximum capture duration type=$dataType seconds=$seconds response=${response.dataType}")
-        }
-    }
-
-    private fun saveSelectedProfile(
-        device: ScannedDevice,
-        deviceClass: DeviceClass,
-        userOverridden: Boolean,
-    ) {
-        device.userSelectedClass = deviceClass
         DeviceProfileStore.saveLastSelected(
             this,
             DeviceProfile(
                 macAddress = device.connectionAddress,
                 advertisedName = device.advertisedName,
-                detectedClass = deviceClass,
-                selectedClass = deviceClass,
-                userOverridden = userOverridden,
+                detectedClass = DeviceClass.MOYOUNG_W620,
+                selectedClass = DeviceClass.MOYOUNG_W620,
+                userOverridden = true,
             ),
         )
-    }
-
-    private fun pairingChoiceFor(detected: DeviceClass): DeviceClass = when (detected) {
-        DeviceClass.HEY_CYAN,
-        DeviceClass.EYEVUE,
-        DeviceClass.TUNEBUDS,
-        DeviceClass.MOYOUNG_W620,
-        DeviceClass.UNKNOWN,
-        -> DeviceClass.HEY_CYAN
-        else -> detected
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun connectMeizuMyvu(device: ScannedDevice) {
-        val bonded = runCatching {
-            BluetoothAdapter.getDefaultAdapter()
-                ?.getRemoteDevice(device.macAddress)
-                ?.bondState == BluetoothDevice.BOND_BONDED
-        }.getOrDefault(false)
-        if (!bonded) {
-            androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Pair MYVU in Android first")
-                .setMessage(
-                    "The upstream MYVU client expects a Classic Bluetooth bond before opening its RFCOMM relay. " +
-                        "Pair the glasses in Android Bluetooth settings, then force-stop the official MYVU app because the glasses accept only one app connection at a time.",
-                )
-                .setNegativeButton("Cancel", null)
-                .setNeutralButton("Bluetooth settings") { _, _ ->
-                    startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-                }
-                .setPositiveButton("Connect anyway") { _, _ -> startMeizuMyvuConnection(device.macAddress) }
-                .show()
-            return
-        }
-        startMeizuMyvuConnection(device.macAddress)
-    }
-
-    private fun startMeizuMyvuConnection(address: String) {
-        MeizuMyvuManager.getInstance(this).connect(address, this, userInitiated = true)
-        Toast.makeText(
-            this,
-            "Connecting to Meizu MYVU. Force-stop the official MYVU app while using CyanBridge.",
-            Toast.LENGTH_LONG,
-        ).show()
+        MoyoungW620Manager.getInstance(this).connect(device.macAddress, device.advertisedName)
+        Toast.makeText(this, "Connecting to BV300", Toast.LENGTH_SHORT).show()
         finish()
     }
 
@@ -561,7 +168,6 @@ class DeviceBindActivity : BaseActivity() {
         rssi: Int,
         scanRecord: ScanRecord? = null,
         manufacturerCompanyIds: Set<Int> = emptySet(),
-        connectionAddress: String? = null,
     ) {
         val sanitizedName = name?.trim()?.takeIf { it.isNotEmpty() }
         val existingIndex = deviceList.indexOfFirst { it.macAddress.equals(mac, ignoreCase = true) }
@@ -570,7 +176,6 @@ class DeviceBindActivity : BaseActivity() {
             val previousName = existing.advertisedName
             val previousClass = existing.detectedClass
             existing.rssi = rssi
-            connectionAddress?.let { existing.connectionAddress = it }
             if (existing.advertisedName.isNullOrBlank() && sanitizedName != null) {
                 existing.advertisedName = sanitizedName
             }
@@ -580,7 +185,7 @@ class DeviceBindActivity : BaseActivity() {
                     existing.advertisedName,
                     existing.serviceUuids,
                     manufacturerCompanyIds,
-                    existing.connectionAddress,
+                    existing.macAddress,
                 ),
             )
             publishDevices(
@@ -592,21 +197,25 @@ class DeviceBindActivity : BaseActivity() {
             sanitizedName,
             scanRecord?.serviceUuids.orEmpty(),
             manufacturerCompanyIds,
-            connectionAddress ?: mac,
+            mac,
         )
-        if (sanitizedName == null && detectedClass == DeviceClass.UNKNOWN) return
+        val rememberedAddress = DeviceProfileStore.loadLastSelected(this)
+            ?.takeIf { it.selectedClass == DeviceClass.MOYOUNG_W620 }?.macAddress
+        if (sanitizedName == null && !Bv300PairingPolicy.isCandidate(
+                detectedClass, null, mac, rememberedAddress,
+            )
+        ) return
 
         val newDevice = ScannedDevice(
             macAddress = mac,
-            advertisedName = sanitizedName ?: detectedClass.displayName(),
+            advertisedName = sanitizedName ?: "BV300",
             rssi = rssi,
             serviceUuids = scanRecord?.serviceUuids.orEmpty(),
         )
-        connectionAddress?.let { newDevice.connectionAddress = it }
+        newDevice.setDetectedClass(detectedClass)
         DeviceProfileStore.getUserOverrideForMac(this, newDevice.connectionAddress)?.let { override ->
             if (override != newDevice.detectedClass) newDevice.userSelectedClass = override
         }
-        scanSize++
         deviceList += newDevice
         DiagnosticsStore.deviceDiscovered(
             newDevice.advertisedName,
@@ -614,7 +223,6 @@ class DeviceBindActivity : BaseActivity() {
             recognized = detectedClass != DeviceClass.UNKNOWN,
         )
         publishDevices(force = true)
-        if (scanSize > 30) BleScannerHelper.getInstance().stopScan(this)
     }
 
     /** Avoid repeatedly recreating scan rows while TalkBack is navigating them. */
@@ -622,15 +230,17 @@ class DeviceBindActivity : BaseActivity() {
         val now = System.currentTimeMillis()
         if (!force && now - lastDeviceListPublishAtMs < DEVICE_LIST_PUBLISH_INTERVAL_MS) return
         lastDeviceListPublishAtMs = now
-        // Meta is intentionally kept in the normal scan list now. Choosing the Meta type routes
-        // to MetaPairingActivity instead of attempting a direct Bluetooth connection.
-        scannedDevices = deviceList.toList()
+        val rememberedBv300 = DeviceProfileStore.loadLastSelected(this)
+            ?.takeIf { it.selectedClass == DeviceClass.MOYOUNG_W620 }
+        scannedDevices = deviceList.filter { device ->
+            Bv300PairingPolicy.isCandidate(
+                device.detectedClass, device.advertisedName, device.macAddress,
+                rememberedBv300?.macAddress,
+            )
+        }
     }
 
     override fun onDestroy() {
-        protocolDetectionJob?.cancel()
-        protocolDetectionJob = null
-        protocolDetectionActive = false
         handler.removeCallbacks(scanTimeout)
         if (EventBus.getDefault().isRegistered(this)) EventBus.getDefault().unregister(this)
         super.onDestroy()
@@ -707,20 +317,12 @@ class DeviceBindActivity : BaseActivity() {
                     for (index in 0 until manufacturerData.size()) add(manufacturerData.keyAt(index))
                 }
             }
-            val tuneBudsData = companyIds.firstOrNull { it in TUNEBUDS_COMPANY_IDS }
-                ?.let { companyId -> scanRecord?.getManufacturerSpecificData(companyId) }
-            val classicAddress = tuneBudsData?.let { data ->
-                runCatching { TuneBudsProtocol.deriveClassicAddress(data) }
-                    .onFailure { Log.w(TAG, "Could not derive TuneBuds Classic Bluetooth address", it) }
-                    .getOrNull()
-            }
             upsertDevice(
                 address,
                 name,
                 rssi,
                 scanRecord,
                 manufacturerCompanyIds = companyIds,
-                connectionAddress = classicAddress,
             )
         }
 
@@ -739,16 +341,6 @@ class DeviceBindActivity : BaseActivity() {
     private companion object {
         const val TAG = "DeviceBindActivity"
         const val REQUEST_ENABLE_BLUETOOTH = 300
-        const val META_DAT_PROFILE_ID = "META_DAT"
         const val DEVICE_LIST_PUBLISH_INTERVAL_MS = 1_000L
-        const val HEY_CYAN_PROBE_CALLBACK = "device_bind_protocol_probe"
-        const val EYEVUE_PROBE_TIMEOUT_MS = 30_000L
-        const val TUNEBUDS_PROBE_TIMEOUT_MS = 12_000L
-        const val HEY_CYAN_CONNECT_TIMEOUT_MS = 6_000L
-        const val HEY_CYAN_RESPONSE_TIMEOUT_MS = 4_000L
-        const val HEY_CYAN_MAX_VIDEO_SECONDS = 720
-        const val HEY_CYAN_MAX_AUDIO_SECONDS = 7_200
-        const val EYEVUE_MAX_RECORDING_SECONDS = 600
-        val TUNEBUDS_COMPANY_IDS = setOf(0x475A, 0x455A, 0x535A, 0x4D5A)
     }
 }

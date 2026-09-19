@@ -71,6 +71,7 @@ class DeviceClassifierTest {
             ),
         )
         assertEquals(DeviceClass.MOYOUNG_W620, DeviceClassifier.guessDeviceClass("W620"))
+        assertEquals(DeviceClass.MOYOUNG_W620, DeviceClassifier.guessDeviceClass("BV300"))
         assertEquals(DeviceClass.MOYOUNG_W620, DeviceClassifier.guessDeviceClass("MoYoung Glasses"))
         assertEquals(
             DeviceClass.MOYOUNG_W620,

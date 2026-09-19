@@ -4,117 +4,57 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import com.fersaiyan.cyanbridge.shared.devices.DeviceClass
 import com.fersaiyan.cyanbridge.shared.devices.ScannedDevice
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindScreen
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
 class DeviceBindScreenTest {
-    @get:Rule
-    val composeRule = createComposeRule()
+    @get:Rule val composeRule = createComposeRule()
 
-    @Test
-    fun scanRowHidesMacAddress() {
-        val mac = "AA:BB:CC:DD:EE:FF"
+    private val bv300 = ScannedDevice(
+        macAddress = "AA:BB:CC:DD:EE:FF",
+        advertisedName = "BV300",
+        rssi = -54,
+        detectedClass = DeviceClass.MOYOUNG_W620,
+        selectedClass = null,
+        userOverridden = false,
+    )
+
+    @Test fun scanShowsOnlyBv300FlowWithoutMacOrOtherProtocolPicker() {
         composeRule.setContent {
             CyanBridgeTheme {
                 DeviceBindScreen(
-                    devices = listOf(
-                        ScannedDevice(
-                            macAddress = mac,
-                            advertisedName = "Smart Glasses",
-                            rssi = -54,
-                            detectedClass = DeviceClass.HEY_CYAN,
-                            selectedClass = null,
-                            userOverridden = false,
-                        ),
-                    ),
-                    isScanning = false,
-                    connectingDevice = null,
-                    selectedClass = DeviceClass.HEY_CYAN,
-                    onScan = {},
-                    onPairMetaGlasses = {},
-                    onSelectDevice = {},
-                    onSelectedClassChange = {},
-                    onConfirmConnection = {},
-                    onDismissConnection = {},
-                    onBack = {},
+                    devices = listOf(bv300), isScanning = false, connectingDevice = null,
+                    onScan = {}, onSelectDevice = {}, onConfirmConnection = {},
+                    onDismissConnection = {}, onBack = {},
                 )
             }
         }
-
-        composeRule.onNodeWithText("Smart Glasses").assertExists()
-        composeRule.onNodeWithText("Signal: -54 dBm").assertExists()
-        composeRule.onAllNodesWithText(mac).assertCountEquals(0)
-        composeRule.onNodeWithText("Pair Meta Glasses").assertExists()
+        composeRule.onNodeWithText("Connect BV300").assertExists()
+        composeRule.onNodeWithText("BV300").assertExists()
+        composeRule.onAllNodesWithText(bv300.macAddress).assertCountEquals(0)
+        composeRule.onAllNodesWithText("Pair Meta Glasses").assertCountEquals(0)
     }
 
-    @Test
-    fun pairMetaButtonLaunchesDedicatedFlow() {
-        var clicked = false
-        composeRule.setContent {
-            CyanBridgeTheme {
-                DeviceBindScreen(
-                    devices = emptyList(),
-                    isScanning = false,
-                    connectingDevice = null,
-                    selectedClass = DeviceClass.HEY_CYAN,
-                    onScan = {},
-                    onPairMetaGlasses = { clicked = true },
-                    onSelectDevice = {},
-                    onSelectedClassChange = {},
-                    onConfirmConnection = {},
-                    onDismissConnection = {},
-                    onBack = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithText("Pair Meta Glasses").performClick()
-        composeRule.runOnIdle { assertTrue(clicked) }
-    }
-
-    @Test
-    fun typePickerUsesUnifiedConsumerGlassesChoiceAndKeepsMeta() {
-        var selected: DeviceClass? = null
+    @Test fun confirmationInvokesBv300Connection() {
         var confirmed = false
-        val device = ScannedDevice(
-            macAddress = "AA:BB:CC:DD:EE:FF",
-            advertisedName = "Smart Glasses",
-            rssi = -50,
-            detectedClass = DeviceClass.UNKNOWN,
-            selectedClass = null,
-            userOverridden = false,
-        )
         composeRule.setContent {
             CyanBridgeTheme {
                 DeviceBindScreen(
-                    devices = listOf(device),
-                    isScanning = false,
-                    connectingDevice = device,
-                    selectedClass = DeviceClass.HEY_CYAN,
-                    onScan = {},
-                    onPairMetaGlasses = {},
-                    onSelectDevice = {},
-                    onSelectedClassChange = { selected = it },
-                    onConfirmConnection = { confirmed = true },
-                    onDismissConnection = {},
-                    onBack = {},
+                    devices = listOf(bv300), isScanning = false, connectingDevice = bv300,
+                    onScan = {}, onSelectDevice = {},
+                    onConfirmConnection = { confirmed = true }, onDismissConnection = {}, onBack = {},
                 )
             }
         }
-
-        composeRule.onNodeWithText("HeyCyan / EyeVue / TuneBuds / MoYoung").assertExists()
-        composeRule.onNodeWithText("Choose the protocol manually on the next screen").assertExists()
-        composeRule.onNodeWithText("Meta Ray-Ban").performClick()
-        composeRule.runOnIdle { assertEquals(DeviceClass.META_RAYBAN, selected) }
-
-        composeRule.onNodeWithText("Connect").performClick()
+        composeRule.onNodeWithText("Connect BV300?").assertExists()
+        composeRule.onNodeWithTag("bv300_pair_confirm").performClick()
         composeRule.runOnIdle { assertTrue(confirmed) }
     }
 }

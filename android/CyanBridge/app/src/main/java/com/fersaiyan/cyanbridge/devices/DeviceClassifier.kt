@@ -53,7 +53,7 @@ object DeviceClassifier {
             return DeviceClass.TUNEBUDS
         }
 
-        if (lower.contains("w620") || lower.contains("moyoung") || lower.contains("da echo")) {
+        if (lower.contains("bv300") || lower.contains("w620") || lower.contains("moyoung") || lower.contains("da echo")) {
             return DeviceClass.MOYOUNG_W620
         }
 
