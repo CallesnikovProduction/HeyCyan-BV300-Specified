@@ -4,14 +4,40 @@
   <component name="GradleSettings">
     <option name="linkedExternalProjectsSettings">
       <GradleProjectSettings>
+        <compositeConfiguration>
+          <compositeBuild compositeDefinitionSource="SCRIPT">
+            <builds>
+              <build path="$PROJECT_DIR$/../../heycyan-core" name="heycyan-android-core">
+                <projects>
+                  <project path="$PROJECT_DIR$/../../heycyan-core" />
+                  <project path="$PROJECT_DIR$/../../heycyan-core/core-audio" />
+                  <project path="$PROJECT_DIR$/../../heycyan-core/core-ble" />
+                  <project path="$PROJECT_DIR$/../../heycyan-core/core-connectivity" />
+                  <project path="$PROJECT_DIR$/../../heycyan-core/core-data" />
+                  <project path="$PROJECT_DIR$/../../heycyan-core/core-summarization-api" />
+                  <project path="$PROJECT_DIR$/../../heycyan-core/core-transcription-api" />
+                  <project path="$PROJECT_DIR$/../../heycyan-core/core-utils" />
+                </projects>
+              </build>
+            </builds>
+          </compositeBuild>
+        </compositeConfiguration>
         <option name="testRunner" value="CHOOSE_PER_TEST" />
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
-        <option name="gradleJvm" value="#GRADLE_LOCAL_JAVA_HOME" />
+        <option name="gradleJvm" value="temurin-17" />
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />
-            <option value="$PROJECT_DIR$/LIB_GLASSES_SDK" />
             <option value="$PROJECT_DIR$/app" />
+            <option value="$PROJECT_DIR$/shared" />
+            <option value="$PROJECT_DIR$/../../heycyan-core" />
+            <option value="$PROJECT_DIR$/../../heycyan-core/core-audio" />
+            <option value="$PROJECT_DIR$/../../heycyan-core/core-ble" />
+            <option value="$PROJECT_DIR$/../../heycyan-core/core-connectivity" />
+            <option value="$PROJECT_DIR$/../../heycyan-core/core-data" />
+            <option value="$PROJECT_DIR$/../../heycyan-core/core-summarization-api" />
+            <option value="$PROJECT_DIR$/../../heycyan-core/core-transcription-api" />
+            <option value="$PROJECT_DIR$/../../heycyan-core/core-utils" />
           </set>
         </option>
       </GradleProjectSettings>

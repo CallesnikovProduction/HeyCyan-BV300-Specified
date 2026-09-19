@@ -25,10 +25,8 @@ class SettingsScreenTest {
         val sections = SettingsSection.entries
         assertTrue(sections.contains(SettingsSection.AI_AUTOMATION))
         assertTrue(sections.contains(SettingsSection.MEMORY_PRIVACY))
-        assertTrue(sections.contains(SettingsSection.TRANSCRIPTS))
         assertTrue(sections.contains(SettingsSection.DATA))
-        assertTrue(sections.contains(SettingsSection.SUPPORT))
-        assertTrue(sections.contains(SettingsSection.FAQ))
+        assertEquals(3, sections.size)
     }
 
     @Test

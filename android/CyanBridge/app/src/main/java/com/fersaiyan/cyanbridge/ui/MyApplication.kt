@@ -15,6 +15,7 @@ import com.oudmon.ble.base.bluetooth.BleAction
 import com.oudmon.ble.base.bluetooth.BleBaseControl
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.communication.LargeDataHandler
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
@@ -219,6 +220,7 @@ class MyApplication : Application(){
         LocalBroadcastManager.getInstance(CONTEXT)
             .registerReceiver(myBleReceiver, intentFilter)
         BleBaseControl.getInstance(CONTEXT).setmContext(this)
+        DiagnosticsStore.markSdkReady()
     }
 
     private fun initReceiver() {
@@ -233,7 +235,6 @@ class MyApplication : Application(){
         } else {
             registerReceiver(deviceReceiver, deviceFilter)
         }
-
     }
 
     fun getDeviceIntentFilter(): IntentFilter? {

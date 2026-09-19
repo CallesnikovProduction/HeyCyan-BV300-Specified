@@ -46,10 +46,7 @@
     <string name="settings_appearance_description">Theme, accent profile, dynamic color, and contrast</string>
     <string name="settings_custom_ai_provider">Custom AI provider</string>
     <string name="settings_memory_privacy">Memory Privacy</string>
-    <string name="settings_transcripts">Transcripts</string>
     <string name="settings_data">Data</string>
-    <string name="settings_support">Support</string>
-    <string name="settings_faq">FAQ</string>
     <string name="settings_recording_active">Recording active</string>
     <string name="settings_bluetooth_mic">Bluetooth mic</string>
     <string name="settings_phone_mic">Phone mic</string>
@@ -82,23 +79,10 @@
     <string name="settings_set_vault_passphrase">Set vault passphrase</string>
     <string name="settings_clear_vault_passphrase">Clear vault passphrase</string>
     <string name="settings_reset_memory_vault">Reset memory vault</string>
-    <string name="settings_store_transcripts">Store transcripts</string>
-    <string name="settings_redact_names">Redact names</string>
-    <string name="settings_full_transcription_exports">Include full transcription in exports</string>
     <string name="settings_data_description">Back up or restore chats, memory files, recordings, and app settings.</string>
     <string name="settings_export_local_data">Export local data</string>
     <string name="settings_import_local_data">Import local data</string>
     <string name="settings_clear_local_data">Clear local data</string>
-    <string name="settings_support_description">Send an issue description with diagnostic logs to help investigate Bluetooth, sync, voice, or app failures.</string>
-    <string name="settings_send_debug_logs">Send debug logs</string>
-    <string name="settings_faq_local_models_question">How do I set up Local Models?</string>
-    <string name="settings_faq_local_models_answer">Open Local Agent from Native Plugins, then configure a model on this device.</string>
-    <string name="settings_faq_subscription_question">Do I need a subscription?</string>
-    <string name="settings_faq_subscription_answer">No. Tasker and Local Models can be used without a subscription. Pro is optional.</string>
-    <string name="settings_faq_data_question">How is data handled?</string>
-    <string name="settings_faq_data_answer">Data stays on this phone by default. You can export, import, or clear it from Data.</string>
-    <string name="settings_faq_source_question">Can I review the source?</string>
-    <string name="settings_faq_source_answer">Yes. CyanBridge is open source and its behavior can be reviewed in the project repository.</string>
     <string name="settings_range_error">Use %1$d to %2$d</string>
 
     <!-- Appearance -->

@@ -12,6 +12,8 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsSignal
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
 import com.oudmon.ble.base.bluetooth.BleOperateManager
 import com.oudmon.ble.base.bluetooth.DeviceManager
 import org.greenrobot.eventbus.EventBus
@@ -35,6 +37,7 @@ class BluetoothReceiver : BroadcastReceiver() {
                         Manifest.permission.BLUETOOTH_CONNECT,
                     ) == PackageManager.PERMISSION_GRANTED
                 if (connectState == BluetoothAdapter.STATE_OFF) {
+                    DiagnosticsStore.connection(DiagnosticsSignal.Disconnected, "Bluetooth adapter off")
                     Log.i("qc" ,"Bluetooth is off --> ")
                     if (canConnect && !DeviceProfileStore.isMetaSelected(context)) {
                         BleOperateManager.getInstance().setBluetoothTurnOff(false)
@@ -42,6 +45,7 @@ class BluetoothReceiver : BroadcastReceiver() {
                     }
                     EventBus.getDefault().post(BluetoothEvent(false))
                 } else if (connectState == BluetoothAdapter.STATE_ON) {
+                    DiagnosticsStore.semantic("Bluetooth adapter ready", category = com.fersaiyan.cyanbridge.diagnostics.DiagnosticsCategory.CONNECTION)
                     Log.i("qc" ,"Bluetooth is on --> ")
                     if (canConnect && !DeviceProfileStore.isMetaSelected(context)) {
                         BleOperateManager.getInstance().setBluetoothTurnOff(true)
@@ -79,6 +83,10 @@ class BluetoothReceiver : BroadcastReceiver() {
                         name?.startsWith("Q_") == true
 
                     if (!saved.isNullOrBlank() && saved.equals(device.address, ignoreCase = true)) {
+                        DiagnosticsStore.semantic(
+                            "Selected glasses Classic ACL connected",
+                            category = com.fersaiyan.cyanbridge.diagnostics.DiagnosticsCategory.CONNECTION,
+                        )
                         AutoPairManager.requestConnectToMac(context, device.address, reason = "acl_connected_saved")
                     } else if (looksLikeGlasses) {
                         AutoPairManager.requestConnectToMac(context, device.address, reason = "acl_connected_name")
@@ -86,6 +94,21 @@ class BluetoothReceiver : BroadcastReceiver() {
                 }
             }
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                if (
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
+                    PackageManager.PERMISSION_GRANTED
+                ) {
+                    val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                    val selectedAddress = DeviceProfileStore.loadLastSelected(context)?.macAddress
+                    if (device != null && selectedAddress.equals(device.address, ignoreCase = true)) {
+                        DiagnosticsStore.semantic(
+                            "Selected glasses Classic ACL disconnected",
+                            "BLE control connection is tracked separately",
+                            com.fersaiyan.cyanbridge.diagnostics.DiagnosticsCategory.CONNECTION,
+                        )
+                    }
+                }
                 // BLE reconnect loop will handle this; just trigger an immediate attempt.
                 AutoPairManager.requestConnect(context, reason = "acl_disconnected")
             }

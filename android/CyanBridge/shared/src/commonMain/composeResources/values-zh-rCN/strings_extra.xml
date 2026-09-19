@@ -26,10 +26,7 @@
     <string name="settings_appearance_description">主题、强调色方案、动态颜色和对比度</string>
     <string name="settings_custom_ai_provider">自定义 AI 提供商</string>
     <string name="settings_memory_privacy">记忆隐私</string>
-    <string name="settings_transcripts">转录</string>
     <string name="settings_data">数据</string>
-    <string name="settings_support">支持</string>
-    <string name="settings_faq">常见问题</string>
     <string name="settings_recording_active">录音进行中</string>
     <string name="settings_bluetooth_mic">蓝牙麦克风</string>
     <string name="settings_phone_mic">手机麦克风</string>
@@ -62,23 +59,10 @@
     <string name="settings_set_vault_passphrase">设置保险库密码短语</string>
     <string name="settings_clear_vault_passphrase">清除保险库密码短语</string>
     <string name="settings_reset_memory_vault">重置记忆保险库</string>
-    <string name="settings_store_transcripts">保存转录</string>
-    <string name="settings_redact_names">隐藏姓名</string>
-    <string name="settings_full_transcription_exports">导出时包含完整转录</string>
     <string name="settings_data_description">备份或恢复聊天、记忆文件、录音和应用设置。</string>
     <string name="settings_export_local_data">导出本地数据</string>
     <string name="settings_import_local_data">导入本地数据</string>
     <string name="settings_clear_local_data">清除本地数据</string>
-    <string name="settings_support_description">发送问题说明和诊断日志，帮助调查蓝牙、同步、语音或应用故障。</string>
-    <string name="settings_send_debug_logs">发送调试日志</string>
-    <string name="settings_faq_local_models_question">如何设置本地模型？</string>
-    <string name="settings_faq_local_models_answer">从原生插件中打开 Local Agent，然后在此设备上配置模型。</string>
-    <string name="settings_faq_subscription_question">需要订阅吗？</string>
-    <string name="settings_faq_subscription_answer">不需要。Tasker 和本地模型无需订阅即可使用。Pro 是可选的。</string>
-    <string name="settings_faq_data_question">数据如何处理？</string>
-    <string name="settings_faq_data_answer">默认情况下数据保留在此手机上。你可以在“数据”中导出、导入或清除数据。</string>
-    <string name="settings_faq_source_question">可以查看源代码吗？</string>
-    <string name="settings_faq_source_answer">可以。CyanBridge 是开源项目，可在项目仓库中查看其行为。</string>
     <string name="settings_range_error">请输入 %1$d 到 %2$d</string>
 
     <string name="appearance_title">外观</string>

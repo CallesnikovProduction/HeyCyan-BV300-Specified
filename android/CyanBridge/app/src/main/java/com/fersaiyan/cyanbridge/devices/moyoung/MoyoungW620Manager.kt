@@ -6,8 +6,11 @@ import com.moyoung.glasses.CRPBleClient
 import com.moyoung.glasses.conn.CRPBleConnection
 import com.moyoung.glasses.conn.CRPBleDevice
 import com.moyoung.glasses.conn.callback.CRPFileDownloadCallback
+import com.moyoung.glasses.conn.listener.CRPAiDialogueListener
 import com.moyoung.glasses.conn.listener.CRPBleConnectionStateListener
+import com.moyoung.glasses.conn.listener.CRPFeatureStateListener
 import com.moyoung.glasses.conn.listener.CRPWifiChangeListener
+import com.moyoung.glasses.conn.protos.RunningStatus
 import com.moyoung.glasses.conn.type.CRPWifiType
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -16,7 +19,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -25,6 +30,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.io.IOException
 
 data class MoyoungW620State(
@@ -43,6 +49,12 @@ data class MoyoungW620State(
 data class MoyoungWifiCredentials(
     val ssid: String,
     val password: String,
+)
+
+data class MoyoungAiDialogueAudio(
+    val pcm16: ByteArray,
+    val sampleRateHz: Int = 16_000,
+    val cancelledByGlasses: Boolean = false,
 )
 
 /** Thin adapter around the published MoYoung Android SDK. */
@@ -71,18 +83,31 @@ class MoyoungW620Manager private constructor(context: Context) {
     private val mediaMutex = Mutex()
     private val wifiStateEvents = MutableSharedFlow<WifiStateEvent>(extraBufferCapacity = 8)
     private val wifiConnectionEvents = MutableSharedFlow<Boolean>(extraBufferCapacity = 8)
+    private val _aiDialogueAudio = MutableSharedFlow<MoyoungAiDialogueAudio>(extraBufferCapacity = 2)
     private val _state = MutableStateFlow(MoyoungW620State())
 
     private var device: CRPBleDevice? = null
     private var connection: CRPBleConnection? = null
+    private val aiDialogueAudioLock = Any()
+    private var aiDialogueAudioBuffer = ByteArrayOutputStream()
+    private var aiDialogueAudioBytes: Long = 0L
+    private var aiDialogueAudioFrames: Long = 0L
 
     val state: StateFlow<MoyoungW620State> = _state.asStateFlow()
+    val aiDialogueAudio: SharedFlow<MoyoungAiDialogueAudio> = _aiDialogueAudio.asSharedFlow()
 
     @Synchronized
     fun connect(address: String, deviceName: String? = null) {
         val normalizedAddress = address.trim()
         if (normalizedAddress.isBlank()) {
             updateError("No MoYoung Bluetooth address was selected")
+            return
+        }
+        if (
+            _state.value.protocolState == "CONNECTING" &&
+            _state.value.deviceAddress.equals(normalizedAddress, ignoreCase = true)
+        ) {
+            Log.d(TAG, "Ignoring duplicate connect while the same device is still connecting")
             return
         }
         if (isConnected() && _state.value.deviceAddress.equals(normalizedAddress, ignoreCase = true)) return
@@ -231,6 +256,78 @@ class MoyoungW620Manager private constructor(context: Context) {
                 )
             }
         }
+        activeConnection.setAiDialogueListener(object : CRPAiDialogueListener {
+            override fun onDialogueStart() {
+                synchronized(aiDialogueAudioLock) {
+                    aiDialogueAudioBuffer = ByteArrayOutputStream()
+                    aiDialogueAudioBytes = 0L
+                    aiDialogueAudioFrames = 0L
+                }
+                Log.i(TAG, "AI dialogue started from glasses")
+            }
+
+            override fun onDialogueAudioChange(audio: ByteArray?) {
+                if (audio == null) return
+                val snapshot = synchronized(aiDialogueAudioLock) {
+                    aiDialogueAudioBuffer.write(audio)
+                    aiDialogueAudioFrames += 1L
+                    aiDialogueAudioBytes += audio.size
+                    aiDialogueAudioFrames to aiDialogueAudioBytes
+                }
+                if (snapshot.first == 1L || snapshot.first % 100L == 0L) {
+                    Log.i(
+                        TAG,
+                        "AI dialogue audio frames=${snapshot.first} bytes=${snapshot.second} " +
+                            "lastFrame=${audio.size}",
+                    )
+                }
+            }
+
+            override fun onDialogueImageChange(image: File?) {
+                Log.i(
+                    TAG,
+                    "AI dialogue image path=${image?.absolutePath.orEmpty()} exists=${image?.isFile == true}",
+                )
+            }
+
+            override fun onDialogueStop(cancelled: Boolean) {
+                val completed = synchronized(aiDialogueAudioLock) {
+                    val audio = aiDialogueAudioBuffer.toByteArray()
+                    aiDialogueAudioBuffer = ByteArrayOutputStream()
+                    audio
+                }
+                Log.i(
+                    TAG,
+                    "AI dialogue stopped cancelled=$cancelled frames=$aiDialogueAudioFrames " +
+                        "bytes=$aiDialogueAudioBytes",
+                )
+                // The glasses also use AudioCancel for their 30-second capture timeout. The
+                // decoded PCM received before that signal is still a valid user utterance.
+                if (completed.isNotEmpty()) {
+                    _aiDialogueAudio.tryEmit(
+                        MoyoungAiDialogueAudio(
+                            pcm16 = completed,
+                            cancelledByGlasses = cancelled,
+                        ),
+                    )
+                }
+            }
+        })
+        activeConnection.setFeatureActiveStateListener(object : CRPFeatureStateListener {
+            override fun onFeatureStateChanged(status: RunningStatus) {
+                Log.i(
+                    TAG,
+                    "Feature state " +
+                        "takePicture=${status.takePicture} aiVisual=${status.aiVisual} " +
+                        "audioRecording=${status.audioRecording} videoRecording=${status.videoRecording} " +
+                        "fileSync=${status.fileSync} livingMode=${status.livingMode} " +
+                        "slaveActive=${status.slaveActive} " +
+                        "simuInterpretation=${status.simuInterpretation} " +
+                        "aiDialogue=${status.aiDialogue} slaveOta=${status.slaveOta} " +
+                        "jieliOta=${status.jieliOta}",
+                )
+            }
+        })
         activeConnection.setWifiListener(object : CRPWifiChangeListener {
             override fun onWifiStateChange(type: CRPWifiType, state: Int) {
                 Log.i(TAG, "Wi-Fi state type=$type state=$state")
@@ -257,6 +354,13 @@ class MoyoungW620Manager private constructor(context: Context) {
         activeConnection.syncTime()
         activeConnection.queryBattery()
         activeConnection.queryNewMediaFile()
+        activeConnection.queryFeatureActiveState()
+        activeConnection.queryWearCheckState { enabled ->
+            Log.i(TAG, "Wear detection enabled=$enabled")
+        }
+        activeConnection.queryVoiceWakeUpState { enabled ->
+            Log.i(TAG, "Voice wake-up enabled=$enabled")
+        }
     }
 
     private suspend fun awaitSdkDownload(

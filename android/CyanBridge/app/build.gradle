@@ -170,6 +170,9 @@ dependencies {
     implementation project(":shared")
     implementation files("libs/glasses_sdk_20250723_v01.aar")
     implementation files("libs/moyoung_glasses_sdk_0.0.7_20260624.aar")
+    // Required at runtime by the MoYoung SDK when the glasses start an AI dialogue.
+    // The vendor AAR references OpusManager but does not bundle its decoder classes.
+    implementation "com.caitun.ble:jl_audio_decode:2.1.0_20012"
     implementation "com.google.protobuf:protobuf-java:4.29.3"
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

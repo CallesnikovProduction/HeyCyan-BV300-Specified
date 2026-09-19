@@ -26,10 +26,7 @@
     <string name="settings_appearance_description">테마, 강조색 프로필, 동적 색상 및 대비</string>
     <string name="settings_custom_ai_provider">맞춤 AI 제공업체</string>
     <string name="settings_memory_privacy">메모리 개인정보 보호</string>
-    <string name="settings_transcripts">텍스트 변환</string>
     <string name="settings_data">데이터</string>
-    <string name="settings_support">지원</string>
-    <string name="settings_faq">FAQ</string>
     <string name="settings_recording_active">녹음 활성</string>
     <string name="settings_bluetooth_mic">Bluetooth 마이크</string>
     <string name="settings_phone_mic">휴대전화 마이크</string>
@@ -62,23 +59,10 @@
     <string name="settings_set_vault_passphrase">보관함 암호 문구 설정</string>
     <string name="settings_clear_vault_passphrase">보관함 암호 문구 삭제</string>
     <string name="settings_reset_memory_vault">메모리 보관함 재설정</string>
-    <string name="settings_store_transcripts">텍스트 변환 저장</string>
-    <string name="settings_redact_names">이름 가리기</string>
-    <string name="settings_full_transcription_exports">내보내기에 전체 텍스트 변환 포함</string>
     <string name="settings_data_description">채팅, 메모리 파일, 녹음 및 앱 설정을 백업하거나 복원합니다.</string>
     <string name="settings_export_local_data">로컬 데이터 내보내기</string>
     <string name="settings_import_local_data">로컬 데이터 가져오기</string>
     <string name="settings_clear_local_data">로컬 데이터 삭제</string>
-    <string name="settings_support_description">Bluetooth, 동기화, 음성 또는 앱 오류를 조사할 수 있도록 문제 설명과 진단 로그를 보내세요.</string>
-    <string name="settings_send_debug_logs">디버그 로그 보내기</string>
-    <string name="settings_faq_local_models_question">로컬 모델을 어떻게 설정하나요?</string>
-    <string name="settings_faq_local_models_answer">네이티브 플러그인에서 Local Agent를 열고 이 기기에서 모델을 구성하세요.</string>
-    <string name="settings_faq_subscription_question">구독이 필요한가요?</string>
-    <string name="settings_faq_subscription_answer">아니요. Tasker와 로컬 모델은 구독 없이 사용할 수 있습니다. Pro는 선택 사항입니다.</string>
-    <string name="settings_faq_data_question">데이터는 어떻게 처리되나요?</string>
-    <string name="settings_faq_data_answer">기본적으로 데이터는 이 휴대전화에 보관됩니다. 데이터에서 내보내거나 가져오거나 삭제할 수 있습니다.</string>
-    <string name="settings_faq_source_question">소스 코드를 확인할 수 있나요?</string>
-    <string name="settings_faq_source_answer">예. CyanBridge는 오픈 소스이며 프로젝트 저장소에서 동작을 확인할 수 있습니다.</string>
     <string name="settings_range_error">%1$d에서 %2$d 사이를 사용하세요</string>
 
     <string name="appearance_title">모양</string>

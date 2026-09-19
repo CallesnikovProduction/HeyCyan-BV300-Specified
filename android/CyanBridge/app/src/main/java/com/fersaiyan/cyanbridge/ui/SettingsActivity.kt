@@ -56,6 +56,8 @@ import com.fersaiyan.cyanbridge.ui.appearance.AppearanceActivity
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsActivity
+import com.fersaiyan.cyanbridge.assistant.AssistantSettingsActivity
 import com.fersaiyan.cyanbridge.ui.recordings.RecordingsListActivity
 import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.settings.SettingsSection
@@ -473,6 +475,14 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
         showLogSubmissionDialog()
     }
 
+    override fun openGlassesDiagnostics() {
+        startActivity(Intent(this, DiagnosticsActivity::class.java))
+    }
+
+    override fun openBv300Assistant() {
+        startActivity(Intent(this, AssistantSettingsActivity::class.java))
+    }
+
     override fun stopMeetingCapture() {
         MeetingCaptureService.stop(this)
     }
@@ -669,10 +679,7 @@ class SettingsActivity : AppCompatActivity(), SettingsScreenActions {
         val legacyCardName = when (section) {
             SettingsSection.AI_AUTOMATION -> "card_agent_provider"
             SettingsSection.MEMORY_PRIVACY -> "card_memory_privacy"
-            SettingsSection.TRANSCRIPTS -> "card_transcripts"
             SettingsSection.DATA -> "card_data"
-            SettingsSection.FAQ -> "card_faq"
-            SettingsSection.SUPPORT -> "support"
         }
         return "section_expanded_$legacyCardName"
     }

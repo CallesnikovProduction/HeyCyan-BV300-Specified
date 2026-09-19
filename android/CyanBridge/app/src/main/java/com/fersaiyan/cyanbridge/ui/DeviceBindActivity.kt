@@ -29,6 +29,8 @@ import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsProtocol
 import com.fersaiyan.cyanbridge.devices.ScannedDevice
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsSignal
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.DeviceBindScreen
@@ -153,16 +155,19 @@ class DeviceBindActivity : BaseActivity() {
         lastDeviceListPublishAtMs = 0L
         if (!hasBluetooth(this)) {
             isScanning = false
+            DiagnosticsStore.scanner("ERROR", "Bluetooth permission missing")
             requestBluetoothPermission(this, PermissionCallback())
             return
         }
         BleScannerHelper.getInstance().reSetCallback()
         if (!BluetoothUtils.isEnabledBluetooth(this)) {
+            DiagnosticsStore.scanner("ERROR", "Bluetooth adapter off")
             startActivityForResult(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE), REQUEST_ENABLE_BLUETOOTH)
             return
         }
         scanSize = 0
         isScanning = true
+        DiagnosticsStore.scanner("SCANNING")
         BleScannerHelper.getInstance().scanDevice(this, null, bleScanCallback)
         handler.postDelayed(scanTimeout, 15_000)
     }
@@ -171,6 +176,7 @@ class DeviceBindActivity : BaseActivity() {
         handler.removeCallbacks(scanTimeout)
         BleScannerHelper.getInstance().stopScan(this)
         isScanning = false
+        DiagnosticsStore.scanner("IDLE")
     }
 
     private fun confirmConnection() {
@@ -205,6 +211,7 @@ class DeviceBindActivity : BaseActivity() {
 
         connectingDevice = null
         stopScan()
+        DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "Connection requested", selectedDeviceClass.name)
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
 
         when (selectedDeviceClass) {
@@ -257,6 +264,7 @@ class DeviceBindActivity : BaseActivity() {
         }
         connectingDevice = null
         stopScan()
+        DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "Connection requested", normalized.name)
         AutoPairManager.setAutoReconnectSuppressed(false, reason = "user_manual_pair")
         saveSelectedProfile(device, normalized, userOverridden = true)
         // Apply device-specific maximum capture defaults (HeyCyan video/audio,
@@ -600,6 +608,11 @@ class DeviceBindActivity : BaseActivity() {
         }
         scanSize++
         deviceList += newDevice
+        DiagnosticsStore.deviceDiscovered(
+            newDevice.advertisedName,
+            newDevice.macAddress,
+            recognized = detectedClass != DeviceClass.UNKNOWN,
+        )
         publishDevices(force = true)
         if (scanSize > 30) BleScannerHelper.getInstance().stopScan(this)
     }
@@ -635,6 +648,7 @@ class DeviceBindActivity : BaseActivity() {
         override fun run() {
             BleScannerHelper.getInstance().stopScan(this@DeviceBindActivity)
             isScanning = false
+            DiagnosticsStore.scanner("IDLE", "Scan timeout after 15 seconds")
         }
     }
 
@@ -657,10 +671,12 @@ class DeviceBindActivity : BaseActivity() {
     private inner class BleCallback : ScanWrapperCallback {
         override fun onStart() {
             isScanning = true
+            DiagnosticsStore.scanner("SCANNING")
         }
 
         override fun onStop() {
             isScanning = false
+            DiagnosticsStore.scanner("IDLE")
         }
 
         @SuppressLint("MissingPermission")
@@ -674,6 +690,7 @@ class DeviceBindActivity : BaseActivity() {
 
         override fun onScanFailed(errorCode: Int) {
             isScanning = false
+            DiagnosticsStore.scanner("ERROR", "Vendor scanner error=$errorCode")
             Log.w(TAG, "Scan failed: $errorCode")
         }
 

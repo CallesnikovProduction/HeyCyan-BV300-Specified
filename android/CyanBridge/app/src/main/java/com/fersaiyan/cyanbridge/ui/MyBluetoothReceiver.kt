@@ -9,6 +9,8 @@ import com.oudmon.ble.base.bluetooth.QCBluetoothCallbackCloneReceiver
 import com.oudmon.ble.base.communication.Constants
 import com.oudmon.ble.base.communication.LargeDataHandler
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsSignal
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
 import org.greenrobot.eventbus.EventBus
 
 /**
@@ -23,6 +25,7 @@ class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
         Log.e("connectStatue","---connectStatue")
         if (DeviceProfileStore.isMetaSelected(MyApplication.getInstance())) return
         if(device !=null && connected){
+            DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "Bluetooth link connected", "Waiting for GATT services")
             val deviceName = try {
                 device.name
             } catch (_: SecurityException) {
@@ -32,6 +35,7 @@ class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
                 DeviceManager.getInstance().deviceName = deviceName
             }
         }else{
+            DiagnosticsStore.connectionEnded("Bluetooth disconnected before/after readiness")
             EventBus.getDefault().post(BluetoothEvent(false))
         }
     }
@@ -40,6 +44,7 @@ class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
         if (DeviceProfileStore.isMetaSelected(MyApplication.getInstance())) return
         //do init
         LargeDataHandler.getInstance().initEnable()
+        DiagnosticsStore.connection(DiagnosticsSignal.Connected, "GATT services ready", "Vendor command channel initialized")
         // Must receive a callback before other instructions can be issued
         // eg. set time, sync settings, etc.
         EventBus.getDefault().post(BluetoothEvent(true))
@@ -49,6 +54,7 @@ class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
 
     override fun onCharacteristicChange(address: String?, uuid: String?, data: ByteArray?) {
         if (data != null) {
+            DiagnosticsStore.unclassifiedTransport("notify:${uuid ?: "unknown"}", data.size)
             // Feed all notifications into BleIpBridge so it can try to
             // detect any IP information broadcast over BLE.
             bleIpBridge.onCharacteristicChanged("notify:$uuid", data)
@@ -70,6 +76,7 @@ class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
                     MyApplication.getInstance().hardwareVersion = version
                 }
                 else -> {
+                    DiagnosticsStore.unclassifiedTransport("read:$uuid", data.size)
                     // Also send any other characteristic reads through BleIpBridge
                     bleIpBridge.onCharacteristicChanged("read:$uuid", data)
                 }

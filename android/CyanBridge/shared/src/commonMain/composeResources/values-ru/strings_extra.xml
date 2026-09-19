@@ -26,10 +26,7 @@
     <string name="settings_appearance_description">Тема, профиль акцента, динамический цвет и контраст</string>
     <string name="settings_custom_ai_provider">Свой провайдер ИИ</string>
     <string name="settings_memory_privacy">Конфиденциальность памяти</string>
-    <string name="settings_transcripts">Транскрипции</string>
     <string name="settings_data">Данные</string>
-    <string name="settings_support">Поддержка</string>
-    <string name="settings_faq">Частые вопросы</string>
     <string name="settings_recording_active">Запись активна</string>
     <string name="settings_bluetooth_mic">Микрофон Bluetooth</string>
     <string name="settings_phone_mic">Микрофон телефона</string>
@@ -62,23 +59,10 @@
     <string name="settings_set_vault_passphrase">Задать парольную фразу хранилища</string>
     <string name="settings_clear_vault_passphrase">Очистить парольную фразу хранилища</string>
     <string name="settings_reset_memory_vault">Сбросить хранилище памяти</string>
-    <string name="settings_store_transcripts">Сохранять транскрипции</string>
-    <string name="settings_redact_names">Скрывать имена</string>
-    <string name="settings_full_transcription_exports">Включать полную транскрипцию в экспорт</string>
     <string name="settings_data_description">Создавайте резервные копии или восстанавливайте чаты, файлы памяти, записи и настройки приложения.</string>
     <string name="settings_export_local_data">Экспортировать локальные данные</string>
     <string name="settings_import_local_data">Импортировать локальные данные</string>
     <string name="settings_clear_local_data">Очистить локальные данные</string>
-    <string name="settings_support_description">Отправьте описание проблемы и диагностические журналы для расследования сбоев Bluetooth, синхронизации, голоса или приложения.</string>
-    <string name="settings_send_debug_logs">Отправить журналы отладки</string>
-    <string name="settings_faq_local_models_question">Как настроить локальные модели?</string>
-    <string name="settings_faq_local_models_answer">Откройте Local Agent в разделе «Нативные плагины» и настройте модель на этом устройстве.</string>
-    <string name="settings_faq_subscription_question">Нужна ли подписка?</string>
-    <string name="settings_faq_subscription_answer">Нет. Tasker и локальные модели можно использовать без подписки. Pro необязательна.</string>
-    <string name="settings_faq_data_question">Как обрабатываются данные?</string>
-    <string name="settings_faq_data_answer">По умолчанию данные остаются на этом телефоне. Их можно экспортировать, импортировать или удалить в разделе «Данные».</string>
-    <string name="settings_faq_source_question">Можно ли проверить исходный код?</string>
-    <string name="settings_faq_source_answer">Да. CyanBridge имеет открытый исходный код, а его поведение можно проверить в репозитории проекта.</string>
     <string name="settings_range_error">Используйте значение от %1$d до %2$d</string>
 
     <string name="appearance_title">Внешний вид</string>

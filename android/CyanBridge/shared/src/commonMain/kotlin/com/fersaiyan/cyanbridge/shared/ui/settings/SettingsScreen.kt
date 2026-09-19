@@ -122,6 +122,8 @@ interface SettingsScreenActions {
     fun importClaudeData()
     fun clearLocalData()
     fun sendDebugLogs()
+    fun openGlassesDiagnostics() = Unit
+    fun openBv300Assistant() = Unit
     fun stopMeetingCapture()
 }
 
@@ -255,13 +257,22 @@ fun SettingsScreen(
                 }
             }
             item {
-                SettingsSectionCard(
-                    title = stringResource(Res.string.settings_transcripts),
-                    expanded = SettingsSection.TRANSCRIPTS in expandedSections,
-                    onToggle = { onToggleSection(SettingsSection.TRANSCRIPTS) },
-                ) {
-                    TranscriptsContent(state, actions)
-                }
+                QuickActionCard(
+                    title = "BV300 Assistant",
+                    subtitle = "Voice, ChatGPT handoff and glasses status",
+                    actionLabel = stringResource(Res.string.action_open),
+                    onClick = actions::openBv300Assistant,
+                    testTag = "settings_bv300_assistant",
+                )
+            }
+            item {
+                QuickActionCard(
+                    title = "Glasses diagnostics",
+                    subtitle = "Connection and input events",
+                    actionLabel = stringResource(Res.string.action_open),
+                    onClick = actions::openGlassesDiagnostics,
+                    testTag = "settings_glasses_diagnostics",
+                )
             }
             item {
                 SettingsSectionCard(
@@ -270,24 +281,6 @@ fun SettingsScreen(
                     onToggle = { onToggleSection(SettingsSection.DATA) },
                 ) {
                     DataContent(actions)
-                }
-            }
-            item {
-                SettingsSectionCard(
-                    title = stringResource(Res.string.settings_support),
-                    expanded = SettingsSection.SUPPORT in expandedSections,
-                    onToggle = { onToggleSection(SettingsSection.SUPPORT) },
-                ) {
-                    SupportContent(actions)
-                }
-            }
-            item {
-                SettingsSectionCard(
-                    title = stringResource(Res.string.settings_faq),
-                    expanded = SettingsSection.FAQ in expandedSections,
-                    onToggle = { onToggleSection(SettingsSection.FAQ) },
-                ) {
-                    FaqContent()
                 }
             }
         }
@@ -673,25 +666,6 @@ private fun MemoryPrivacyContent(state: SettingsUiState, actions: SettingsScreen
 }
 
 @Composable
-private fun TranscriptsContent(state: SettingsUiState, actions: SettingsScreenActions) {
-    SwitchRow(
-        label = stringResource(Res.string.settings_store_transcripts),
-        checked = state.transcriptStorageEnabled,
-        onCheckedChange = actions::setTranscriptStorageEnabled,
-    )
-    SwitchRow(
-        label = stringResource(Res.string.settings_redact_names),
-        checked = state.redactNamesEnabled,
-        onCheckedChange = actions::setRedactNamesEnabled,
-    )
-    SwitchRow(
-        stringResource(Res.string.settings_full_transcription_exports),
-        state.includeFullTranscriptionInExports,
-        onCheckedChange = actions::setIncludeFullTranscriptionEnabled,
-    )
-}
-
-@Composable
 private fun DataContent(actions: SettingsScreenActions) {
     Text(
         text = stringResource(Res.string.settings_data_description),
@@ -705,36 +679,6 @@ private fun DataContent(actions: SettingsScreenActions) {
     ActionButton("Import ChatGPT data", actions::importChatGptData)
     ActionButton("Import Claude data", actions::importClaudeData)
     ActionButton(stringResource(Res.string.settings_clear_local_data), actions::clearLocalData, destructive = true)
-}
-
-@Composable
-private fun SupportContent(actions: SettingsScreenActions) {
-    Text(
-        text = stringResource(Res.string.settings_support_description),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    ActionButton(stringResource(Res.string.settings_send_debug_logs), actions::sendDebugLogs)
-}
-
-@Composable
-private fun FaqContent() {
-    val items = listOf(
-        stringResource(Res.string.settings_faq_local_models_question) to stringResource(Res.string.settings_faq_local_models_answer),
-        stringResource(Res.string.settings_faq_subscription_question) to stringResource(Res.string.settings_faq_subscription_answer),
-        stringResource(Res.string.settings_faq_data_question) to stringResource(Res.string.settings_faq_data_answer),
-        stringResource(Res.string.settings_faq_source_question) to stringResource(Res.string.settings_faq_source_answer),
-    )
-    items.forEach { (question, answer) ->
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(question, style = MaterialTheme.typography.titleSmall)
-            Text(
-                answer,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
 }
 
 @Composable

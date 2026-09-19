@@ -9,6 +9,8 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsSignal
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
 import com.fersaiyan.cyanbridge.devices.eyevue.EyevueManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
@@ -290,18 +292,21 @@ object AutoPairManager {
                 return true
             }
             Log.i(TAG, "Auto-pair ($reason): starting MYVU foreground connection")
+            DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "Reconnect attempt", "MYVU · $reason")
             manager.connect(address)
             return true
         }
         if (profile?.selectedClass == DeviceClass.TUNEBUDS) {
             val address = profile.macAddress.takeIf { it.isNotBlank() } ?: return false
             Log.i(TAG, "Auto-pair ($reason): TuneBuds RFCOMM $address")
+            DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "Reconnect attempt", "TuneBuds · $reason")
             TuneBudsManager.getInstance(context).connect(address, profile.advertisedName)
             return true
         }
         if (profile?.selectedClass == DeviceClass.MOYOUNG_W620) {
             val address = profile.macAddress.takeIf { it.isNotBlank() } ?: return false
             Log.i(TAG, "Auto-pair ($reason): MoYoung BLE $address")
+            DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "Reconnect attempt", "MoYoung · $reason")
             MoyoungW620Manager.getInstance(context).connect(address, profile.advertisedName)
             return true
         }
@@ -326,6 +331,7 @@ object AutoPairManager {
         }
 
         Log.i(TAG, "Auto-pair ($reason): connectDirectly($mac)")
+        DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "Reconnect attempt", "HeyCyan · $reason")
         try {
             mgr.reConnectMac = mac
         } catch (_: Throwable) {

@@ -26,10 +26,7 @@
     <string name="settings_appearance_description">Tema, profilo accento, colore dinamico e contrasto</string>
     <string name="settings_custom_ai_provider">Provider IA personalizzato</string>
     <string name="settings_memory_privacy">Privacy della memoria</string>
-    <string name="settings_transcripts">Trascrizioni</string>
     <string name="settings_data">Dati</string>
-    <string name="settings_support">Assistenza</string>
-    <string name="settings_faq">Domande frequenti</string>
     <string name="settings_recording_active">Registrazione attiva</string>
     <string name="settings_bluetooth_mic">Microfono Bluetooth</string>
     <string name="settings_phone_mic">Microfono del telefono</string>
@@ -62,23 +59,10 @@
     <string name="settings_set_vault_passphrase">Imposta passphrase del vault</string>
     <string name="settings_clear_vault_passphrase">Cancella passphrase del vault</string>
     <string name="settings_reset_memory_vault">Reimposta memory vault</string>
-    <string name="settings_store_transcripts">Memorizza trascrizioni</string>
-    <string name="settings_redact_names">Oscura nomi</string>
-    <string name="settings_full_transcription_exports">Includi la trascrizione completa nelle esportazioni</string>
     <string name="settings_data_description">Esegui il backup o ripristina chat, file di memoria, registrazioni e impostazioni dell'app.</string>
     <string name="settings_export_local_data">Esporta dati locali</string>
     <string name="settings_import_local_data">Importa dati locali</string>
     <string name="settings_clear_local_data">Cancella dati locali</string>
-    <string name="settings_support_description">Invia una descrizione del problema con i log diagnostici per esaminare problemi Bluetooth, sincronizzazione, voce o app.</string>
-    <string name="settings_send_debug_logs">Invia log di debug</string>
-    <string name="settings_faq_local_models_question">Come configuro i modelli locali?</string>
-    <string name="settings_faq_local_models_answer">Apri Local Agent da Plugin nativi, quindi configura un modello su questo dispositivo.</string>
-    <string name="settings_faq_subscription_question">Serve un abbonamento?</string>
-    <string name="settings_faq_subscription_answer">No. Tasker e i modelli locali possono essere usati senza abbonamento. Pro e facoltativo.</string>
-    <string name="settings_faq_data_question">Come vengono gestiti i dati?</string>
-    <string name="settings_faq_data_answer">Per impostazione predefinita i dati restano su questo telefono. Puoi esportarli, importarli o cancellarli da Dati.</string>
-    <string name="settings_faq_source_question">Posso controllare il codice sorgente?</string>
-    <string name="settings_faq_source_answer">Si. CyanBridge e open source e il suo comportamento puo essere esaminato nel repository del progetto.</string>
     <string name="settings_range_error">Usa da %1$d a %2$d</string>
 
     <string name="appearance_title">Aspetto</string>

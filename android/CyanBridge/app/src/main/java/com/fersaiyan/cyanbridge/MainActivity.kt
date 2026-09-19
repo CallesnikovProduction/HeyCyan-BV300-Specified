@@ -108,6 +108,7 @@ import com.fersaiyan.cyanbridge.devices.eyevue.EyevueWifiTransport
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
+import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungAiDialogueAudio
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungWifiCredentials
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLocalHotspot
@@ -125,6 +126,15 @@ import com.fersaiyan.cyanbridge.ui.requestBluetoothPermission
 import com.fersaiyan.cyanbridge.ui.ensureNotificationPermission
 import com.fersaiyan.cyanbridge.ui.requestWifiP2pPermission
 import com.fersaiyan.cyanbridge.ui.setOnClickListener
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsCategory
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsSignal
+import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
+import com.fersaiyan.cyanbridge.assistant.AssistantPreferences
+import com.fersaiyan.cyanbridge.assistant.AssistantRuntime
+import com.fersaiyan.cyanbridge.assistant.AssistantSettingsActivity
+import com.fersaiyan.cyanbridge.assistant.UtteranceSource
+import com.fersaiyan.cyanbridge.assistant.LocalAssistantVoiceInput
+import com.fersaiyan.cyanbridge.diagnostics.InputObservability
 import com.fersaiyan.cyanbridge.ui.startKtxActivity
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
@@ -212,6 +222,8 @@ import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoute
 import com.fersaiyan.cyanbridge.ai.router.GlassesAssistantRoutingPolicy
 import com.fersaiyan.cyanbridge.ai.router.CliRelayClient
 import com.fersaiyan.cyanbridge.ai.router.RelayErrorLocalizer
+import com.fersaiyan.cyanbridge.ai.transcription.AutomaticTranscriptionEngine
+import com.fersaiyan.cyanbridge.assistant.Bv300AudioPreprocessor
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveActivity
 import com.fersaiyan.cyanbridge.ai.live.GeminiLiveVisionPreferences
 import com.fersaiyan.cyanbridge.ai.router.MediaInferenceRoutingPolicy
@@ -279,6 +291,8 @@ import kotlinx.coroutines.flow.merge
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var moyoungReplyPlayer: android.media.MediaPlayer? = null
+    private var bv300MediaSession: android.media.session.MediaSession? = null
     private val localSpeechSessionManager by lazy {
         StreamingSpeechSessionManager.getInstance(applicationContext)
     }
@@ -343,6 +357,138 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
     }
 
+    private fun speakMoyoungReply(text: String, onDone: (() -> Unit)? = null) {
+        val outputDevice = findMoyoungAudioOutput()
+        if (outputDevice == null) {
+            AssistantRuntime.update { recordTts("Failure · BV300 output unavailable") }
+            Log.e("MoyoungW620", "BV300 audio output is unavailable; refusing fallback audio route")
+            Toast.makeText(this, "BV300 audio output is not connected", Toast.LENGTH_LONG).show()
+            onDone?.invoke()
+            return
+        }
+
+        val engine = tts
+        if (!ttsReady || engine == null) {
+            AssistantRuntime.update { recordTts("Failure · local TTS unavailable") }
+            Log.e("MoyoungW620", "TTS is unavailable for BV300 reply")
+            onDone?.invoke()
+            return
+        }
+
+        val languageTag = ImageQuestionPreferences.get(this).appLanguageTag
+        languageTag.takeIf(String::isNotBlank)?.let { tag ->
+            engine.setLanguage(Locale.forLanguageTag(tag))
+        }
+        val utteranceId = "moyoung_reply_${System.nanoTime()}"
+        val outputFile = File(cacheDir, "$utteranceId.wav")
+        AudioSessionCoordinator.markBusy()
+        ttsDoneCallbacks[utteranceId] = {
+            runOnUiThread {
+                playMoyoungAudioFile(
+                    file = outputFile,
+                    outputDevice = outputDevice,
+                    logLabel = "assistant reply",
+                    onDone = onDone,
+                )
+            }
+        }
+        val result = engine.synthesizeToFile(text, Bundle(), outputFile, utteranceId)
+        Log.i(
+            "MoyoungW620",
+            "Queued BV300 TTS synthesis device=${outputDevice.productName} " +
+                "type=${outputDevice.type} address=${outputDevice.address} result=$result",
+        )
+        if (result != TextToSpeech.SUCCESS) {
+            AssistantRuntime.update { recordTts("Failure · synthesis rejected") }
+            ttsDoneCallbacks.remove(utteranceId)
+            runCatching { outputFile.delete() }
+            AudioSessionCoordinator.markIdle()
+            onDone?.invoke()
+        } else {
+            AssistantRuntime.update { recordTts("Synthesis queued · playback not verified") }
+        }
+    }
+
+    private fun findMoyoungAudioOutput(): android.media.AudioDeviceInfo? {
+        val selectedAddress = DeviceProfileStore.loadLastSelected(this)?.macAddress.orEmpty()
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        val outputs = audioManager.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+        val candidates = outputs.filter { device ->
+            device.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                device.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    device.type == android.media.AudioDeviceInfo.TYPE_BLE_HEADSET)
+        }
+        Log.i(
+            "MoyoungW620",
+            "Bluetooth audio outputs=" + candidates.joinToString { device ->
+                "${device.productName}:${device.type}:${device.address}"
+            },
+        )
+        val bv300Candidates = candidates.filter { device ->
+            device.productName?.toString()?.equals("BV300", ignoreCase = true) == true ||
+                (selectedAddress.isNotBlank() && device.address.equals(selectedAddress, ignoreCase = true))
+        }
+        return bv300Candidates.firstOrNull { device ->
+            device.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+        } ?: bv300Candidates.firstOrNull()
+    }
+
+    private fun playMoyoungAudioFile(
+        file: File,
+        outputDevice: android.media.AudioDeviceInfo,
+        logLabel: String,
+        onDone: (() -> Unit)?,
+    ) {
+        var finished = false
+        fun finish() {
+            if (finished) return
+            finished = true
+            moyoungReplyPlayer?.release()
+            moyoungReplyPlayer = null
+            runCatching { file.delete() }
+            AudioSessionCoordinator.markIdle()
+            onDone?.invoke()
+        }
+
+        try {
+            moyoungReplyPlayer?.release()
+            val player = android.media.MediaPlayer().apply {
+                setAudioAttributes(
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build(),
+                )
+                setDataSource(file.absolutePath)
+                val preferred = setPreferredDevice(outputDevice)
+                Log.i(
+                    "MoyoungW620",
+                    "BV300 preferred audio device accepted=$preferred " +
+                        "name=${outputDevice.productName} address=${outputDevice.address}",
+                )
+                setOnCompletionListener { finish() }
+                setOnErrorListener { _, what, extra ->
+                    Log.e("MoyoungW620", "BV300 $logLabel playback failed what=$what extra=$extra")
+                    finish()
+                    true
+                }
+                prepare()
+            }
+            moyoungReplyPlayer = player
+            player.start()
+            val routedDevice = player.routedDevice
+            Log.i(
+                "MoyoungW620",
+                "Playing $logLabel through BV300 routed=" +
+                    "${routedDevice?.productName}:${routedDevice?.type}:${routedDevice?.address}",
+            )
+        } catch (error: Throwable) {
+            Log.e("MoyoungW620", "Could not play $logLabel through BV300", error)
+            finish()
+        }
+    }
+
     private fun speak(
         text: String,
         languageTag: String? = null,
@@ -389,6 +535,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     companion object {
         const val EXTRA_TASKER_COMMAND = "tasker_command"
         const val EXTRA_START_META_IMAGE_QUESTION = "start_meta_image_question"
+        const val ACTION_TEST_BV300_SPEECH = "com.fersaiyan.cyanbridge.TEST_BV300_SPEECH"
         private const val TAG = "MainActivity"
         private var loggedLargeDataHandlerMethods = false
         private const val AI_MODE_PHONE_ASSISTANT = "PhoneAssistant"
@@ -605,6 +752,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var tuneBudsUiJob: Job? = null
     private var moyoungW620Manager: MoyoungW620Manager? = null
     private var moyoungW620UiJob: Job? = null
+    private var moyoungW620AssistantJob: Job? = null
     private val tuneBudsAiPhotoInProgress = AtomicBoolean(false)
     private var pendingTransportPermissionAction: (() -> Unit)? = null
 
@@ -645,8 +793,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-    // Transcription UI moved to the "Transcriptions & recordings" section
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = AcitivytMainBinding.inflate(layoutInflater)
@@ -655,6 +801,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             GlassesAssistantMode.CUSTOM_AI_PROVIDER -> AI_MODE_CUSTOM_AI_PROVIDER
         }
         initView()
+        if (isMoyoungW620Selected()) setupBv300MediaButtonCapture()
         refreshImageThumbnailQuality()
         refreshGeminiLiveImageDelay()
         setupMeetingCaptureUi()
@@ -758,6 +905,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         handleMetaRegistrationIntent(intent)
         handleTaskerCommand(intent)
         maybeStartMetaImageQuestion(intent)
+        maybeTestBv300Speech(intent)
 
         BatteryOptimizationGuideActivity.launchIfNeeded(this)
     }
@@ -819,6 +967,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onDestroy() {
         cancelLocalStreamingSpeech("activity destroyed")
+        bv300MediaSession?.release()
+        bv300MediaSession = null
+        moyoungReplyPlayer?.release()
+        moyoungReplyPlayer = null
         val voiceQueryWasActive = voiceQueryInProgress.getAndSet(null) != null
         activeVoiceRecognizer.getAndSet(null)?.let { recognizer ->
             runCatching { recognizer.destroy() }
@@ -889,6 +1041,63 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         super.onDestroy()
         tts?.stop()
         tts?.shutdown()
+    }
+
+    private fun setupBv300MediaButtonCapture() {
+        if (bv300MediaSession != null) return
+        bv300MediaSession = android.media.session.MediaSession(this, "BV300Controls").apply {
+            setCallback(object : android.media.session.MediaSession.Callback() {
+                override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
+                    @Suppress("DEPRECATION")
+                    val event = mediaButtonIntent.getParcelableExtra<android.view.KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                        ?: return false
+                    val action = when (event.action) {
+                        android.view.KeyEvent.ACTION_DOWN -> "DOWN"
+                        android.view.KeyEvent.ACTION_UP -> "UP"
+                        else -> event.action.toString()
+                    }
+                    val keyName = android.view.KeyEvent.keyCodeToString(event.keyCode)
+                    Log.i("BV300Controls", "Media button key=$keyName action=$action repeat=${event.repeatCount}")
+                    DiagnosticsStore.semantic(
+                        "BV300 media control",
+                        "$keyName · $action · repeat=${event.repeatCount}",
+                        DiagnosticsCategory.INPUT,
+                    )
+                    return true
+                }
+
+                override fun onPlay() = recordBv300TransportControl("PLAY")
+
+                override fun onPause() = recordBv300TransportControl("PAUSE")
+
+                override fun onSkipToNext() = recordBv300TransportControl("NEXT")
+
+                override fun onSkipToPrevious() = recordBv300TransportControl("PREVIOUS")
+            })
+            setPlaybackState(
+                android.media.session.PlaybackState.Builder()
+                    .setActions(
+                        android.media.session.PlaybackState.ACTION_PLAY_PAUSE or
+                            android.media.session.PlaybackState.ACTION_PLAY or
+                            android.media.session.PlaybackState.ACTION_PAUSE or
+                            android.media.session.PlaybackState.ACTION_SKIP_TO_NEXT or
+                            android.media.session.PlaybackState.ACTION_SKIP_TO_PREVIOUS,
+                    )
+                    .setState(android.media.session.PlaybackState.STATE_PAUSED, 0L, 1f)
+                    .build(),
+            )
+            isActive = true
+        }
+        Log.i("BV300Controls", "BV300 media-button capture active")
+    }
+
+    private fun recordBv300TransportControl(command: String) {
+        Log.i("BV300Controls", "Transport command=$command")
+        DiagnosticsStore.semantic(
+            "BV300 media control",
+            command,
+            DiagnosticsCategory.INPUT,
+        )
     }
     inner class PermissionCallback : OnPermissionCallback {
         override fun onGranted(permissions: MutableList<String>, all: Boolean) {
@@ -1058,6 +1267,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         handleTaskerCommand(intent)
         maybeStartMetaImageQuestion(intent)
+        maybeTestBv300Speech(intent)
+    }
+
+    private fun maybeTestBv300Speech(sourceIntent: Intent) {
+        if (sourceIntent.action != ACTION_TEST_BV300_SPEECH) return
+        sourceIntent.action = null
+        binding.root.post {
+            speakMoyoungReply("BV300 assistant speech test")
+        }
     }
 
     private fun handleMetaRegistrationIntent(callbackIntent: Intent): Boolean {
@@ -1158,6 +1376,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (meizuMyvuUiJob == null) {
                 meizuMyvuUiJob = lifecycleScope.launch {
                     manager.state.collect { state ->
+                        if (isMeizuMyvuSelected()) {
+                            DiagnosticsStore.connectionFromManager(state.connectionLabel, "MYVU")
+                        }
                         if (state.relayReady) {
                             pendingMeizuMyvuFailure = null
                         }
@@ -1215,6 +1436,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 eyevueUiJob = lifecycleScope.launch {
                     manager.state.collect { eyevue ->
                         if (!isEyevueSelected()) return@collect
+                        DiagnosticsStore.connectionFromManager(eyevue.connectionLabel, "EyeVue")
                         binding.statusText.text = eyevue.connectionLabel
                         binding.storageText.text = eyevue.storageCount?.toString() ?: "--"
                         updateBatteryText(eyevue.batteryPercent)
@@ -1231,6 +1453,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (eyevueWakeWordJob == null) {
                 eyevueWakeWordJob = lifecycleScope.launch {
                     manager.wakeWordEvents.collect {
+                        DiagnosticsStore.semantic(
+                            "EyeVue voice-stream start",
+                            "Confirmed protocol-level wake event",
+                            DiagnosticsCategory.INPUT,
+                        )
                         if (isEyevueSelected() && isAiHijackEnabled) {
                             handleAiWakeWordActivation("eyevue")
                         }
@@ -1246,6 +1473,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 tuneBudsUiJob = lifecycleScope.launch {
                     manager.state.collect { tuneBuds ->
                         if (!isTuneBudsSelected()) return@collect
+                        DiagnosticsStore.connectionFromManager(tuneBuds.connectionLabel, "TuneBuds")
                         val storage = tuneBuds.storage?.let {
                             "${it.usedMiB} MiB used / ${it.freeMiB} MiB free"
                         } ?: "--"
@@ -1286,6 +1514,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 moyoungW620UiJob = lifecycleScope.launch {
                     manager.state.collect { moyoung ->
                         if (!isMoyoungW620Selected()) return@collect
+                        DiagnosticsStore.connectionFromManager(moyoung.connectionLabel, "MoYoung")
                         val counts = listOfNotNull(
                             moyoung.photoCount?.let { "$it photos" },
                             moyoung.videoCount?.let { "$it videos" },
@@ -1301,6 +1530,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                 storageLabel = counts,
                                 transfer = state.transfer.copy(countsLabel = counts),
                             )
+                        }
+                    }
+                }
+            }
+            if (moyoungW620AssistantJob == null) {
+                moyoungW620AssistantJob = lifecycleScope.launch {
+                    manager.aiDialogueAudio.collect { audio ->
+                        if (isMoyoungW620Selected()) {
+                            handleMoyoungAiDialogueAudio(audio)
                         }
                     }
                 }
@@ -3887,6 +4125,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun onBluetoothEvent(event: BluetoothEvent) {
+        if (event.connect) {
+            DiagnosticsStore.connection(DiagnosticsSignal.Connected, "Application connection callback")
+        } else {
+            DiagnosticsStore.semantic(
+                "Application disconnect callback",
+                category = DiagnosticsCategory.CONNECTION,
+                observability = InputObservability.INDIRECT_EFFECT,
+            )
+        }
         updateConnectionStatus(event.connect)
         if (event.connect) {
             otaManager.onBluetoothConnected()
@@ -6173,6 +6420,165 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun handleMoyoungAiDialogueAudio(audio: MoyoungAiDialogueAudio) {
+        Log.i(
+            "MoyoungW620",
+            "Processing decoded AI audio bytes=${audio.pcm16.size} " +
+                "cancelledByGlasses=${audio.cancelledByGlasses}",
+        )
+        val manualHandoff = AssistantPreferences.manualMode(this)
+        if (!manualHandoff) when (currentAssistantRoute()) {
+            GlassesAssistantRoute.TASKER_EXTERNAL_UI -> {
+                triggerTaskerVoiceAutomation()
+                return
+            }
+
+            GlassesAssistantRoute.PHONE_ASSISTANT -> {
+                launchPhoneAssistant()
+                return
+            }
+
+            GlassesAssistantRoute.LOCAL,
+            GlassesAssistantRoute.PRO -> Unit
+        }
+
+        if (!manualHandoff && showAssistantSetupIfNeeded(AssistantTestKind.VOICE)) return
+        val queryToken = Any()
+        if (!voiceQueryInProgress.compareAndSet(null, queryToken)) {
+            Log.i("MoyoungW620", "Ignoring AI dialogue while another voice query is active")
+            return
+        }
+
+        prepareAiQuestionForLockScreen()
+        if (manualHandoff) AssistantRuntime.update {
+            startListening(UtteranceSource.BV300)
+            transcribing()
+        }
+        beginAiQuestionForegroundWork("Processing MoYoung glasses voice question")
+        Toast.makeText(this, "Processing glasses voice question…", Toast.LENGTH_SHORT).show()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val wavFile = File(cacheDir, "moyoung_ai_${System.currentTimeMillis()}.wav")
+            try {
+                logMoyoungPcm16Stats(audio.pcm16, audio.sampleRateHz)
+                val preparedPcm16 = Bv300AudioPreprocessor.prepare(
+                    pcm16 = audio.pcm16,
+                    sampleRateHz = audio.sampleRateHz,
+                )
+                Log.i(
+                    "MoyoungW620",
+                    "Prepared AI dialogue PCM inputSamples=${preparedPcm16.inputSamples} " +
+                        "outputSamples=${preparedPcm16.outputSamples} peak=${preparedPcm16.peak} " +
+                        "gain=${"%.2f".format(preparedPcm16.gain)}",
+                )
+                Bv300AudioPreprocessor.writeWav(
+                    file = wavFile,
+                    pcm16 = preparedPcm16.bytes,
+                    sampleRateHz = audio.sampleRateHz,
+                )
+                val transcriptionSelection = if (manualHandoff) null else AutomaticTranscriptionEngine.select(this@MainActivity)
+                val assistantVoiceInput = if (manualHandoff) LocalAssistantVoiceInput(this@MainActivity) else null
+                suspend fun transcribe(): String = if (assistantVoiceInput != null) {
+                    assistantVoiceInput.transcribe(wavFile, recognitionLanguageTag())
+                } else {
+                    requireNotNull(transcriptionSelection).provider.transcribe(wavFile, "audio/wav", recognitionLanguageTag())
+                }
+                var prompt = transcribe().trim()
+                if (prompt.isBlank()) {
+                    Log.w("MoyoungW620", "AI dialogue transcript was empty; retrying once")
+                    prompt = transcribe().trim()
+                }
+                check(prompt.isNotBlank()) { "The glasses audio transcript was empty" }
+                Log.i("MoyoungW620", "AI dialogue transcript produced length=${prompt.length}")
+
+                if (manualHandoff) {
+                    AssistantRuntime.update { prepare(prompt, System.currentTimeMillis(), UtteranceSource.BV300) }
+                    withContext(Dispatchers.Main) {
+                        if (voiceQueryInProgress.compareAndSet(queryToken, null)) {
+                            finishAiQuestionForegroundWork()
+                        }
+                        Toast.makeText(this@MainActivity, "Message prepared. Review it in BV300 Assistant.", Toast.LENGTH_LONG).show()
+                        startActivity(Intent(this@MainActivity, AssistantSettingsActivity::class.java))
+                    }
+                    return@launch
+                }
+
+                val reply = runChosenProviderQuery(
+                    userPrompt = prompt,
+                    providerType = requireNotNull(transcriptionSelection).route,
+                    ragProfile = RagProfile.LIGHT,
+                )
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Asking: $prompt", Toast.LENGTH_SHORT).show()
+                    speakMoyoungReply(reply) {
+                        if (voiceQueryInProgress.compareAndSet(queryToken, null)) {
+                            finishAiQuestionForegroundWork()
+                        }
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                if (manualHandoff) AssistantRuntime.update { reset() }
+                if (voiceQueryInProgress.compareAndSet(queryToken, null)) {
+                    finishAiQuestionForegroundWork()
+                }
+                throw cancelled
+            } catch (error: Throwable) {
+                Log.e("MoyoungW620", "Could not process glasses AI dialogue", error)
+                if (manualHandoff) AssistantRuntime.update { fail("Local speech recognition failed. Try again.", sttFailed = true) }
+                withContext(Dispatchers.Main) {
+                    if (voiceQueryInProgress.compareAndSet(queryToken, null)) {
+                        finishAiQuestionForegroundWork()
+                    }
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Could not process the glasses voice question",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    speakMoyoungReply("I couldn't process that voice question. Please try again.")
+                }
+            } finally {
+                runCatching { wavFile.delete() }
+            }
+        }
+    }
+
+    private fun logMoyoungPcm16Stats(pcm16: ByteArray, sampleRateHz: Int) {
+        val sampleCount = pcm16.size / 2
+        if (sampleCount == 0) {
+            Log.i("MoyoungW620", "AI dialogue PCM is empty")
+            return
+        }
+
+        var minimum = Int.MAX_VALUE
+        var maximum = Int.MIN_VALUE
+        var peak = 0
+        var nonZeroSamples = 0
+        var sumSquares = 0.0
+        var offset = 0
+        while (offset + 1 < pcm16.size) {
+            val sample = (
+                (pcm16[offset].toInt() and 0xff) or
+                    (pcm16[offset + 1].toInt() shl 8)
+                ).toShort().toInt()
+            minimum = minOf(minimum, sample)
+            maximum = maxOf(maximum, sample)
+            peak = maxOf(peak, kotlin.math.abs(sample))
+            if (sample != 0) nonZeroSamples += 1
+            sumSquares += sample.toDouble() * sample.toDouble()
+            offset += 2
+        }
+
+        val rms = kotlin.math.sqrt(sumSquares / sampleCount)
+        val nonZeroPercent = nonZeroSamples * 100.0 / sampleCount
+        val durationSeconds = sampleCount.toDouble() / sampleRateHz
+        Log.i(
+            "MoyoungW620",
+            "AI dialogue PCM samples=$sampleCount duration=${"%.2f".format(durationSeconds)}s " +
+                "min=$minimum max=$maximum peak=$peak rms=${"%.1f".format(rms)} " +
+                "nonZero=${"%.1f".format(nonZeroPercent)}%",
+        )
+    }
+
     private fun handleAiWakeWordActivation(source: String) {
         if (!isAiHijackEnabled) return
         val route = AiWakeWordPreferences.route(this)
@@ -8145,14 +8551,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         val callback = object : WifiP2pManagerSingleton.WifiP2pCallback {
             override fun onWifiP2pEnabled() {
+                DiagnosticsStore.wifiP2p("READY")
                 Log.i("DataDownload", "WiFi P2P enabled")
             }
 
             override fun onWifiP2pDisabled() {
+                DiagnosticsStore.wifiP2p("DISABLED")
                 Log.e("DataDownload", "WiFi P2P disabled")
             }
 
             override fun onPeersChanged(peers: Collection<WifiP2pDevice>) {
+                DiagnosticsStore.wifiP2p("PEERS FOUND", "count=${peers.size}")
                 Log.i("DataDownload", "Found ${peers.size} P2P devices")
                 if (peers.isEmpty()) return
 
@@ -8247,6 +8656,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
 
             override fun onConnected(info: WifiP2pInfo) {
+                DiagnosticsStore.wifiP2p("CONNECTED", "groupFormed=${info.groupFormed}, owner=${info.isGroupOwner}")
                 Log.i(
                     "DataDownload",
                     "P2P connected: groupFormed=${info.groupFormed}, isGroupOwner=${info.isGroupOwner}"
@@ -8255,6 +8665,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
 
             override fun onDisconnected() {
+                DiagnosticsStore.wifiP2p("DISCONNECTED")
                 Log.i("DataDownload", "P2P disconnected")
                 downloadP2pConnected = false
                 downloadP2pNetwork = null
@@ -8293,18 +8704,22 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
 
             override fun onPeerDiscoveryStarted() {
+                DiagnosticsStore.wifiP2p("DISCOVERING")
                 Log.i("DataDownload", "Peer discovery started")
             }
 
             override fun onPeerDiscoveryFailed(reason: Int) {
+                DiagnosticsStore.wifiP2p("ERROR", "discovery reason=$reason")
                 Log.e("DataDownload", "Peer discovery failed: $reason")
             }
 
             override fun onConnectRequestSent() {
+                DiagnosticsStore.wifiP2p("CONNECTING")
                 Log.i("DataDownload", "Connect request sent")
             }
 
             override fun onConnectRequestFailed(reason: Int) {
+                DiagnosticsStore.wifiP2p("ERROR", "connect reason=$reason")
                 Log.e("DataDownload", "Connect request failed: $reason")
             }
 
@@ -10990,6 +11405,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             // other flows already handled by MyDeviceNotifyListener.
             val load = response.loadData
             if (load.size < 7) return
+            DiagnosticsStore.semantic(
+                name = "Download vendor callback 0x%02X".format(load[6].toInt() and 0xFF),
+                description = "cmdType=$cmdType",
+            )
             when (load[6].toInt()) {
                 0x08 -> {
                     if (load.size >= 11) {
@@ -11294,6 +11713,42 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         @RequiresApi(Build.VERSION_CODES.O)
         override fun parseData(cmdType: Int, response: GlassesDeviceNotifyRsp) {
+            DiagnosticsStore.vendorFrame("vendor:loadData", response.loadData)
+            val diagnosticType = response.loadData.getOrNull(6)?.toInt()?.and(0xFF)
+            when (diagnosticType) {
+                0x02 -> DiagnosticsStore.semantic("AI photo ready callback", "cmdType=$cmdType")
+                0x03 -> DiagnosticsStore.semantic("AI voice activation callback", "cmdType=$cmdType", DiagnosticsCategory.INPUT)
+                0x05 -> DiagnosticsStore.semantic("Battery callback", "cmdType=$cmdType")
+                0x08 -> DiagnosticsStore.semantic("Wi-Fi IP callback", "cmdType=$cmdType")
+                0x09 -> DiagnosticsStore.semantic("Wi-Fi/P2P error callback", "cmdType=$cmdType", DiagnosticsCategory.ERROR)
+                0x0C -> DiagnosticsStore.semantic(
+                    "Pause/voice broadcast packet",
+                    "cmdType=$cmdType; recognized but not handled by the application",
+                    DiagnosticsCategory.TRANSPORT,
+                    InputObservability.RAW_TRANSPORT_EVENT,
+                )
+                0x0D -> DiagnosticsStore.semantic(
+                    "App unbind packet",
+                    "cmdType=$cmdType; recognized but not handled by the application",
+                    observability = InputObservability.RAW_TRANSPORT_EVENT,
+                )
+                0x0E -> DiagnosticsStore.semantic(
+                    "Low memory packet",
+                    "cmdType=$cmdType; recognized but not handled by the application",
+                    observability = InputObservability.RAW_TRANSPORT_EVENT,
+                )
+                0x10 -> DiagnosticsStore.semantic(
+                    "Translation pause packet",
+                    "cmdType=$cmdType; recognized but not handled by the application",
+                    observability = InputObservability.RAW_TRANSPORT_EVENT,
+                )
+                0x12 -> DiagnosticsStore.semantic(
+                    "Volume change packet",
+                    "cmdType=$cmdType",
+                    DiagnosticsCategory.TRANSPORT,
+                    InputObservability.RAW_TRANSPORT_EVENT,
+                )
+            }
             Log.i(
                 "DeviceNotify",
                 "cmdType=$cmdType, loadData=${response.loadData.joinToString(separator = ",") { it.toInt().toString() }}"
