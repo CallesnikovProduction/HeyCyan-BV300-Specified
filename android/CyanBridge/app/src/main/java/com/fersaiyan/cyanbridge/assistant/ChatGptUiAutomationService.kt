@@ -33,7 +33,6 @@ object ChatGptUiAutomation {
         val startedAt: Long,
         var stage: Stage = Stage.OPENING,
         var baselineReply: String? = null,
-        var baselineCopyCount: Int = 0,
         var candidateReply: String? = null,
         var candidateSince: Long = 0L,
         var textSetAt: Long = 0L,
@@ -208,8 +207,7 @@ class ChatGptUiAutomationService : AccessibilityService() {
             ChatGptUiAutomation.fail("ChatGPT has an unsent draft; clear it before BV300 sends a message")
             return
         }
-        request.baselineReply = visibleReply(nodes, request.text)
-        request.baselineCopyCount = nodes.count { it.contentDescription?.toString()?.lowercase() in listOf("скопировать", "copy") }
+        request.baselineReply = latestVisibleReply(nodes, request.text)
         if (currentText == request.text || composer.performAction(
                 AccessibilityNodeInfo.ACTION_SET_TEXT,
                 Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, request.text) },
@@ -263,9 +261,10 @@ class ChatGptUiAutomationService : AccessibilityService() {
     }
 
     private fun receiveReply(request: ChatGptUiAutomation.Request, nodes: List<AccessibilityNodeInfo>) {
-        val reply = visibleReply(nodes, request.text) ?: return
-        val copyCount = nodes.count { it.contentDescription?.toString()?.lowercase() in listOf("скопировать", "copy") }
-        if (reply == request.baselineReply && copyCount <= request.baselineCopyCount) return
+        val anchoredReply = visibleReply(nodes, request.text)
+        val reply = anchoredReply ?: latestVisibleReply(nodes, request.text)
+            ?.takeIf { request.baselineReply != null && it != request.baselineReply }
+            ?: return
         val now = android.os.SystemClock.elapsedRealtime()
         if (reply != request.candidateReply) {
             request.candidateReply = reply
@@ -276,27 +275,36 @@ class ChatGptUiAutomationService : AccessibilityService() {
     }
 
     private fun visibleReply(nodes: List<AccessibilityNodeInfo>, prompt: String): String? {
-        val copy = nodes.lastOrNull { node ->
-            val label = node.contentDescription?.toString().orEmpty().lowercase()
-            label == "скопировать" || label == "copy"
-        } ?: return null
-        val copyBounds = Rect().also(copy::getBoundsInScreen)
-        val width = resources.displayMetrics.widthPixels
-        val promptNode = nodes.lastOrNull { node ->
+        val promptIndex = nodes.indexOfLast { node ->
             node.className?.toString() == "android.widget.TextView" &&
-                node.text?.toString()?.trim() == prompt &&
-                Rect().also(node::getBoundsInScreen).left >= width / 2
-        } ?: return null // Never read an older reply if this request is no longer visible.
-        val promptBottom = Rect().also(promptNode::getBoundsInScreen).bottom
-        val parts = nodes.mapNotNull { node ->
-            if (node.className?.toString() != "android.widget.TextView") return@mapNotNull null
-            val value = node.text?.toString()?.trim().orEmpty()
-            if (value.isBlank()) return@mapNotNull null
-            val bounds = Rect().also(node::getBoundsInScreen)
-            if (bounds.top <= promptBottom || bounds.bottom >= copyBounds.top || bounds.left >= width / 2) null
-            else bounds.top to value
-        }.sortedBy { it.first }
-        return parts.joinToString("\n") { it.second }.takeIf(String::isNotBlank)
+                node.text?.toString()?.trim() == prompt
+        }
+        if (promptIndex < 0) return null
+        val copy = nodes.withIndex().lastOrNull { (index, node) ->
+            index > promptIndex && isCopyAction(node)
+        }?.value ?: return null
+        return replyForCopyAction(copy, prompt)
+    }
+
+    private fun latestVisibleReply(nodes: List<AccessibilityNodeInfo>, prompt: String): String? =
+        nodes.lastOrNull(::isCopyAction)?.let { replyForCopyAction(it, prompt) }
+
+    private fun isCopyAction(node: AccessibilityNodeInfo): Boolean =
+        node.contentDescription?.toString()?.lowercase() in listOf("скопировать", "copy")
+
+    private fun replyForCopyAction(copy: AccessibilityNodeInfo, prompt: String): String? {
+        var group = copy.parent
+        while (group != null) {
+            val descendants = mutableListOf<AccessibilityNodeInfo>()
+            collect(group, descendants)
+            val parts = descendants.mapNotNull { node ->
+                if (node.className?.toString() != "android.widget.TextView") return@mapNotNull null
+                node.text?.toString()?.trim()?.takeIf { it.isNotBlank() && it != prompt }
+            }
+            if (parts.isNotEmpty()) return parts.joinToString("\n")
+            group = group.parent
+        }
+        return null
     }
 
     private fun collect(node: AccessibilityNodeInfo, out: MutableList<AccessibilityNodeInfo>) {

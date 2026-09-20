@@ -3851,6 +3851,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun onBluetoothEvent(event: BluetoothEvent) {
+        // MoYoung/BV300 has its own BLE connection and state flow. The HeyCyan SDK event
+        // must not overwrite that state (or clear its battery/session data).
+        if (isMoyoungW620Selected()) return
         if (event.connect) {
             DiagnosticsStore.connection(DiagnosticsSignal.Connected, "Application connection callback")
         } else {
@@ -6520,6 +6523,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun updateConnectionStatus(connected: Boolean) {
+        if (isMoyoungW620Selected()) {
+            val status = getOrCreateMoyoungW620Manager().state.value.connectionLabel
+            binding.statusText.text = status
+            updateDashboardState { state -> state.copy(connectionLabel = status) }
+            updateDeviceClassText()
+            return
+        }
         if (isTuneBudsSelected()) {
             val tuneBuds = getOrCreateTuneBudsManager().state.value
             val storage = tuneBuds.storage?.let {
