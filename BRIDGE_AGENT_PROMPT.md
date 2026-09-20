@@ -53,7 +53,7 @@ Do not hard-code the terminal app into the glasses driver. Build a reusable comp
 
 ### CyanBridge current state to inspect
 
-CyanBridge appears in the existing repo as an alternative Android app/SDK for HeyCyan-compatible glasses. The repo root includes `android/`, `examples/`, `heycyan-core/`, `ios/`, `third_party/`, `AGENTS.md`, `README.md`, and `WIFI_TRANSFER_ARCHITECTURE.md`. The README describes BLE scanning/connection, photo/video/audio controls, battery/device information, and Android-only Gemini/ChatGPT assistant routing through Tasker automation.
+CyanBridge is an Android-only fork for Blackview BV300 glasses using HeyCyan/MoYoung transport. The active app is under `android/CyanBridge/`; media transfer combines BLE control with Wi-Fi Direct. This document is historical research context, not a current platform inventory.
 
 Primary repo to inspect:
 

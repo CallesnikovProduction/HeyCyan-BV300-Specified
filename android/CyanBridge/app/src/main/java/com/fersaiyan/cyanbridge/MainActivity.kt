@@ -774,7 +774,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         Log.i("DataDownload", "User selected sync flow: ${flow.label}")
                         startDataDownload(flow)
                     },
-                    appearanceSettings = appearance,
                     onNavigateToActivity = ::navigateToDestination,
                 )
                 if (showOfficialHeyCyanWarningDialog) {

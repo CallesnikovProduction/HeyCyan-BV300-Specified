@@ -184,16 +184,6 @@
     <string name="plugins_open_tasker">在 Tasker 中打开</string>
     <string name="plugins_download">下载插件</string>
     <string name="plugins_settings_content_description">%1$s 设置</string>
-    <string name="native_local_agent_title">Local Agent</string>
-    <string name="native_local_agent_description">手机无障碍自动化需要 Android Local Agent 运行时。</string>
-    <string name="native_android_only">仅限 Android</string>
-    <string name="native_auto_diary_title">AutoDiary</string>
-    <string name="native_auto_diary_description">iOS 尚不支持屏幕捕获和每日记忆自动化。</string>
-    <string name="native_auto_audio_title">Auto Audio</string>
-    <string name="native_auto_audio_description">后台捕获眼镜音频需要 iOS 音频/BLE 适配器。</string>
-    <string name="native_visual_diary_title">Visual Diary</string>
-    <string name="native_visual_diary_description">定期视觉笔记需要 iOS 媒体传输和后台调度。</string>
-    <string name="native_ios_pending">iOS 待支持</string>
     <string name="plugins_all_time">全部时间</string>
     <string name="plugins_weekly">每周</string>
     <string name="plugins_monthly">每月</string>

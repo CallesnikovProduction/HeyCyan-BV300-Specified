@@ -16,10 +16,6 @@ The workflow is [`android-self-hosted.yml`](../.github/workflows/android-self-ho
 It runs on pushes to any branch and manual dispatches. It runs Android unit tests,
 shared portability tests, and creates a debug APK artifact.
 
-The repository also needs an Actions secret named `META_GITHUB_TOKEN` with
-`read:packages` access to the Meta Wearables package. The secret is passed only
-to Gradle test/build steps and is never stored in the repository or runner unit.
-
 ## Start or Stop the Runner
 
 The user systemd session needs these environment variables when commands are run

@@ -13,7 +13,6 @@ import com.fersaiyan.cyanbridge.shared.chat.ChatThreadStateReducer
 import com.fersaiyan.cyanbridge.shared.chat.ChatThreadUiState
 import com.fersaiyan.cyanbridge.bridge.core.DisplayCommand
 import com.fersaiyan.cyanbridge.bridge.core.DisplayPriority
-import com.fersaiyan.cyanbridge.shared.platform.CyanBridgeSharedBootstrap
 
 class AppearanceModelsTest {
     @Test
@@ -87,12 +86,9 @@ class AppearanceModelsTest {
     }
 
     @Test
-    fun bridgeCommandsAndBootstrapArePortable() {
+    fun bridgeCommandsArePortable() {
         val command = DisplayCommand.Text("Ready", DisplayPriority.HIGH)
 
         assertEquals("Ready", command.text)
-        assertEquals("CyanBridge", CyanBridgeSharedBootstrap.applicationName())
-        assertEquals("cyan", CyanBridgeSharedBootstrap.defaultAccentProfileId())
-        assertEquals("CHATS", CyanBridgeSharedBootstrap.defaultDestinationId())
     }
 }

@@ -184,16 +184,6 @@
     <string name="plugins_open_tasker">Tasker에서 열기</string>
     <string name="plugins_download">플러그인 다운로드</string>
     <string name="plugins_settings_content_description">%1$s 설정</string>
-    <string name="native_local_agent_title">Local Agent</string>
-    <string name="native_local_agent_description">휴대전화 접근성 자동화에는 Android Local Agent 런타임이 필요합니다.</string>
-    <string name="native_android_only">Android 전용</string>
-    <string name="native_auto_diary_title">AutoDiary</string>
-    <string name="native_auto_diary_description">iOS에서는 아직 화면 캡처와 일일 메모리 자동화를 사용할 수 없습니다.</string>
-    <string name="native_auto_audio_title">Auto Audio</string>
-    <string name="native_auto_audio_description">백그라운드 안경 오디오 캡처에는 iOS 오디오/BLE 어댑터가 필요합니다.</string>
-    <string name="native_visual_diary_title">Visual Diary</string>
-    <string name="native_visual_diary_description">주기적인 시각 노트에는 iOS 미디어 전송과 백그라운드 일정 예약이 필요합니다.</string>
-    <string name="native_ios_pending">iOS 지원 예정</string>
     <string name="plugins_all_time">전체 기간</string>
     <string name="plugins_weekly">주간</string>
     <string name="plugins_monthly">월간</string>

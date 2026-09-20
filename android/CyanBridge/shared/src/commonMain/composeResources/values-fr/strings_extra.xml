@@ -184,16 +184,6 @@
     <string name="plugins_open_tasker">Ouvrir dans Tasker</string>
     <string name="plugins_download">Telecharger le plugin</string>
     <string name="plugins_settings_content_description">Parametres de %1$s</string>
-    <string name="native_local_agent_title">Local Agent</string>
-    <string name="native_local_agent_description">L'automatisation d'accessibilite du telephone necessite le runtime Android Local Agent.</string>
-    <string name="native_android_only">Android uniquement</string>
-    <string name="native_auto_diary_title">AutoDiary</string>
-    <string name="native_auto_diary_description">La capture d'ecran et l'automatisation de memoire quotidienne ne sont pas encore disponibles sur iOS.</string>
-    <string name="native_auto_audio_title">Auto Audio</string>
-    <string name="native_auto_audio_description">La capture audio des lunettes en arriere-plan necessite un adaptateur audio/BLE iOS.</string>
-    <string name="native_visual_diary_title">Visual Diary</string>
-    <string name="native_visual_diary_description">Les notes visuelles periodiques necessitent le transfert de medias iOS et la planification en arriere-plan.</string>
-    <string name="native_ios_pending">iOS en attente</string>
     <string name="plugins_all_time">Depuis toujours</string>
     <string name="plugins_weekly">Hebdomadaire</string>
     <string name="plugins_monthly">Mensuel</string>

@@ -2,7 +2,7 @@
 
 Last audited: 2026-07-15
 
-This is the authoritative plan for migrating CyanBridge's current Android app to Material 3 without regressing its glasses, media, AI, billing, and local-agent behavior. The old Compose branch remains useful as a UI prototype, but it is no longer a safe integration base. A narrow Kotlin Multiplatform module now owns proven portable models and bridge contracts; Compose Multiplatform is being added so both Android and iOS render from the same shared `@Composable` screens, achieving full UI convergence across platforms.
+Historical migration notes from 2026-07-15. This is not the current product plan: the fork is Android-only for BV300, and its iOS host, Apple targets, and billing architecture have since been removed. Retain the Android/Compose design notes here only as research context.
 
 ## Executive Decision
 
