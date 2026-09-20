@@ -75,10 +75,4 @@ class DebugLogSupportTest {
         assertTrue(deviceInfo.contains("Remote base URL: http://100.100.10.20:11434"))
     }
 
-    @Test
-    fun `collector includes Meta registration and device detection tags`() {
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("MetaRaybanManager"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("DAT:CORE:RegistrationManager"))
-        assertTrue(DebugLogSupport.LOG_TAGS.contains("DAT:CORE:BluetoothDeviceDetection"))
-    }
 }

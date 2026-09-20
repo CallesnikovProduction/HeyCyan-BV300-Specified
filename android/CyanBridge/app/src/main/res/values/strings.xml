@@ -1,4 +1,5 @@
 <resources>
+    <string name="chatgpt_accessibility_description">Only after you request a BV300 message: send text in the ChatGPT app and read its visible reply for playback through BV300. Does not read other apps.</string>
     <string name="app_name">CyanBridge</string>
     <string name="language_system_default">System default</string>
     <string name="language_selection_title">Choose app language</string>

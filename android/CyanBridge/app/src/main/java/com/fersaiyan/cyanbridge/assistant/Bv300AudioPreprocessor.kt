@@ -14,7 +14,7 @@ internal object Bv300AudioPreprocessor {
         val gain: Double,
     )
 
-    fun prepare(pcm16: ByteArray, sampleRateHz: Int): PreparedPcm {
+    fun prepare(pcm16: ByteArray, sampleRateHz: Int, compactSilence: Boolean = true): PreparedPcm {
         require(sampleRateHz > 0) { "sampleRateHz must be positive" }
         require(pcm16.size % 2 == 0) { "PCM16 must contain complete samples" }
         val samples = ShortArray(pcm16.size / 2)
@@ -25,7 +25,7 @@ internal object Bv300AudioPreprocessor {
                     (pcm16[offset + 1].toInt() shl 8)
                 ).toShort()
         }
-        val compacted = SilenceCompactor.compactMonoPcm(samples, sampleRateHz)
+        val compacted = if (compactSilence) SilenceCompactor.compactMonoPcm(samples, sampleRateHz) else samples
         val peak = compacted.maxOfOrNull { kotlin.math.abs(it.toInt()) } ?: 0
         val gain = if (peak in 1 until 24_000) {
             (24_000.0 / peak).coerceAtMost(4.0)

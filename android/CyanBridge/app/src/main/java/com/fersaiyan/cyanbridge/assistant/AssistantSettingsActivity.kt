@@ -4,8 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
@@ -50,11 +50,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class AssistantSettingsActivity : AppCompatActivity() {
-    private val transport = ChatGPTAccountTransport()
     private var manualMode by mutableStateOf(false)
-    private var conversationName by mutableStateOf("BV300 Glasses")
+    private var autoSendMode by mutableStateOf(false)
+    private var testPrompt by mutableStateOf("Answer with one word: ready")
     private var diagnosticsExpanded by mutableStateOf(false)
-    private var browserOpened by mutableStateOf(false)
     private var copiedText by mutableStateOf<String?>(null)
     private var voiceTestArmed by mutableStateOf(false)
     private var requestsModel by mutableStateOf("auto")
@@ -67,13 +66,12 @@ class AssistantSettingsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         manualMode = AssistantPreferences.manualMode(this)
-        conversationName = AssistantPreferences.conversationName(this)
+        autoSendMode = AssistantPreferences.autoSendMode(this)
         requestsModel = ProSubscriptionAiPrefs.getRequestsModel(this)
         questionsModel = ProSubscriptionAiPrefs.getQuestionsModel(this)
         tasksModel = ProSubscriptionAiPrefs.getTasksModel(this)
         systemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(this)
         availableModels = (availableModels + requestsModel + questionsModel + tasksModel).distinct()
-        browserOpened = savedInstanceState?.getBoolean("browser_opened") ?: false
         val appearancePreferences = AppearancePreferences(this)
         setContent {
             val appearance by rememberAppearanceSettings(appearancePreferences)
@@ -81,15 +79,12 @@ class AssistantSettingsActivity : AppCompatActivity() {
         }
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        outState.putBoolean("browser_opened", browserOpened)
-        super.onSaveInstanceState(outState)
-    }
-
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun Screen() {
         val assistant by AssistantRuntime.snapshot.collectAsState()
+        val chatGptStatus by ChatGptUiAutomation.status.collectAsState()
+        val lastChatGptReply by ChatGptUiAutomation.lastReply.collectAsState()
         val device by DiagnosticsStore.state.collectAsState()
         Scaffold(topBar = { TopAppBar(title = { Text("BV300 Assistant") }) }) { padding ->
             Column(
@@ -97,23 +92,16 @@ class AssistantSettingsActivity : AppCompatActivity() {
                     .padding(PaddingValues(horizontal = 20.dp, vertical = 12.dp)),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("ChatGPT account", style = MaterialTheme.typography.titleMedium)
-                Text(if (browserOpened) "ChatGPT opened · account verification unavailable" else "Not connected")
-                Text("Automatic account messaging is not supported. Your password and browser session stay outside CyanBridge.")
-                Button(onClick = ::openChatGpt) { Text("Connect ChatGPT · open browser") }
+                Text("ChatGPT app", style = MaterialTheme.typography.titleMedium)
+                Text("The installed ChatGPT app handles your sign-in. BV300 never receives your account credentials.")
+                Button(onClick = ::openChatGpt) { Text("Open ChatGPT app") }
+                Text("UI bridge: $chatGptStatus")
+                lastChatGptReply?.let { Text("Last ChatGPT reply: $it") }
+                OutlinedButton(onClick = {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }) { Text("Enable BV300 ChatGPT accessibility") }
 
-                OutlinedTextField(
-                    value = conversationName,
-                    onValueChange = {
-                        conversationName = it.take(80)
-                        AssistantPreferences.setConversationName(this@AssistantSettingsActivity, conversationName)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Desired conversation") },
-                    supportingText = { Text("Local preference only · remote conversation not verified") },
-                    singleLine = true,
-                )
-                Text("Remote conversation: Not verified")
+                Text("Messages go to the current visible ChatGPT conversation; there is no chat ID binding.")
                 Text("Glasses: ${if (device.connectionStatus == DiagnosticsConnectionStatus.CONNECTED) "Connected" else "Not confirmed connected"}")
                 Text("Input trigger: BV300 assistant button (observed)")
                 Text("Microphone: active only after BV300 trigger")
@@ -152,14 +140,27 @@ class AssistantSettingsActivity : AppCompatActivity() {
                     systemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(this@AssistantSettingsActivity)
                 }) { Text("Reset system prompt") }
 
-                Text("Manual ChatGPT handoff", style = MaterialTheme.typography.titleMedium)
+                Text("BV300 voice to ChatGPT", style = MaterialTheme.typography.titleMedium)
                 androidx.compose.foundation.layout.Row {
-                    Text("Prepare BV300 speech for review", modifier = Modifier.weight(1f))
+                    Text("Capture BV300 speech for review", modifier = Modifier.weight(1f))
                     Switch(checked = manualMode, onCheckedChange = {
                         manualMode = it
                         AssistantPreferences.setManualMode(this@AssistantSettingsActivity, it)
+                        if (!it) {
+                            autoSendMode = false
+                            AssistantPreferences.setAutoSendMode(this@AssistantSettingsActivity, false)
+                        }
                     })
                 }
+                androidx.compose.foundation.layout.Row {
+                    Text("Send automatically after BV300 transcription", modifier = Modifier.weight(1f))
+                    Switch(checked = autoSendMode, onCheckedChange = {
+                        autoSendMode = it
+                        AssistantPreferences.setAutoSendMode(this@AssistantSettingsActivity, it)
+                        if (it) manualMode = true
+                    })
+                }
+                Text("The phone must be unlocked. Automation stops if ChatGPT already has an unsent draft.")
                 OutlinedButton(enabled = manualMode, onClick = {
                     voiceTestArmed = true
                     Toast.makeText(this@AssistantSettingsActivity,
@@ -176,11 +177,25 @@ class AssistantSettingsActivity : AppCompatActivity() {
                     })
                 }
                 OutlinedButton(onClick = ::testSpeechOutput) { Text("Test speech output") }
+                OutlinedTextField(
+                    value = testPrompt,
+                    onValueChange = { testPrompt = it.take(4000) },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("ChatGPT round-trip test message") },
+                )
+                OutlinedButton(onClick = { sendToChatGpt(testPrompt, UtteranceSource.PHONE) }) {
+                    Text("Test send → reply → BV300 audio")
+                }
 
-                assistant.utterance?.takeIf { assistant.phase == AssistantPhase.READY_TO_SEND }?.let { utterance ->
-                    Text("Message prepared · review before sharing", style = MaterialTheme.typography.titleMedium)
+                assistant.utterance?.takeIf {
+                    assistant.phase == AssistantPhase.READY_TO_SEND || assistant.phase == AssistantPhase.ERROR
+                }?.let { utterance ->
+                    Text("Message prepared · review before sending", style = MaterialTheme.typography.titleMedium)
                     Text(utterance.text)
                     Button(onClick = { shareText(utterance.text) }) { Text("Share prepared text") }
+                    Button(onClick = { sendToChatGpt(utterance.text, utterance.source) }) {
+                        Text("Send to ChatGPT and speak reply")
+                    }
                     OutlinedButton(onClick = { copyAndOpenChatGpt(utterance.text) }) {
                         Text("Copy text and open ChatGPT")
                     }
@@ -188,7 +203,7 @@ class AssistantSettingsActivity : AppCompatActivity() {
                         Text("Copied text remains on the Android clipboard until replaced or cleared.")
                         TextButton(onClick = ::clearCopiedText) { Text("Clear copied text") }
                     }
-                    Text("Select the BV300 Glasses chat yourself. CyanBridge cannot verify or read its response.")
+                    Text("Automatic UI mode uses the currently visible ChatGPT conversation.")
                     TextButton(onClick = { AssistantRuntime.update { reset() } }) { Text("Discard prepared message") }
                 }
                 assistant.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -196,9 +211,8 @@ class AssistantSettingsActivity : AppCompatActivity() {
                     Text(if (diagnosticsExpanded) "Hide assistant diagnostics" else "Assistant diagnostics")
                 }
                 if (diagnosticsExpanded) {
-                    Text("Transport: ChatGPTAccountTransport")
-                    Text("Login handoff: YES · Open ChatGPT: YES")
-                    Text("Automatic send: NO · Automatic receive: NO")
+                    Text("Transport: ChatGPT accessibility UI bridge")
+                    Text("Automatic send/receive: ${if (ChatGptUiAutomation.isAvailable()) "READY" else "OFF"}")
                     Text("Last trigger: ${assistant.lastTrigger}")
                     Text("Last STT: ${assistant.lastStt} · Last TTS: ${assistant.lastTts}")
                 }
@@ -241,13 +255,28 @@ class AssistantSettingsActivity : AppCompatActivity() {
     }
 
     private fun openChatGpt() {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://chatgpt.com/"))
-        runCatching { startActivity(intent) }
-            .onSuccess {
-                transport.connect()
-                browserOpened = true
+        val intent = packageManager.getLaunchIntentForPackage(ChatGptUiAutomation.PACKAGE_NAME)
+            ?: run {
+                Toast.makeText(this, "ChatGPT app is not installed", Toast.LENGTH_LONG).show()
+                return
             }
-            .onFailure { Toast.makeText(this, "No browser is available", Toast.LENGTH_LONG).show() }
+        runCatching { startActivity(intent) }
+            .onFailure { Toast.makeText(this, "Could not open ChatGPT", Toast.LENGTH_LONG).show() }
+    }
+
+    private fun sendToChatGpt(text: String, source: UtteranceSource) {
+        if (text.isBlank()) return
+        if (AssistantRuntime.snapshot.value.phase != AssistantPhase.READY_TO_SEND) {
+            AssistantRuntime.update {
+                reset()
+                startListening(source)
+                transcribing()
+                prepare(text, System.currentTimeMillis(), source)
+            }
+        }
+        if (!ChatGptUiAutomation.send(this, text)) {
+            Toast.makeText(this, ChatGptUiAutomation.status.value, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun shareText(text: String) {

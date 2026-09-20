@@ -71,7 +71,6 @@ import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyListene
 import com.oudmon.ble.base.communication.bigData.resp.GlassesDeviceNotifyRsp
 import com.fersaiyan.cyanbridge.databinding.AcitivytMainBinding
 import com.fersaiyan.cyanbridge.ui.DeviceBindActivity
-import com.fersaiyan.cyanbridge.ui.MetaPairingActivity
 import com.fersaiyan.cyanbridge.ui.ChatListActivity
 import com.fersaiyan.cyanbridge.ui.ChatThreadActivity
 import com.fersaiyan.cyanbridge.ui.CommunityPluginPrefs
@@ -132,6 +131,8 @@ import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsSignal
 import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
 import com.fersaiyan.cyanbridge.assistant.AssistantPreferences
 import com.fersaiyan.cyanbridge.assistant.AssistantRuntime
+import com.fersaiyan.cyanbridge.assistant.ChatGptUiAutomation
+import com.fersaiyan.cyanbridge.assistant.AssistantPhase
 import com.fersaiyan.cyanbridge.assistant.AssistantSettingsActivity
 import com.fersaiyan.cyanbridge.assistant.UtteranceSource
 import com.fersaiyan.cyanbridge.assistant.LocalAssistantVoiceInput
@@ -246,7 +247,6 @@ import com.fersaiyan.cyanbridge.shared.glasses.GlassesDashboardUiState
 import com.fersaiyan.cyanbridge.shared.glasses.FirmwarePatchRequestUiState
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesSyncFlow
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesTransferUiState
-import com.fersaiyan.cyanbridge.shared.glasses.MetaRaybanUiState
 import com.fersaiyan.cyanbridge.shared.glasses.MeizuMyvuUiState
 import com.fersaiyan.cyanbridge.shared.glasses.OtaFirmwareSource
 import com.fersaiyan.cyanbridge.shared.glasses.WifiAdbDebugUiState
@@ -273,9 +273,6 @@ import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.CyanBridgeApp
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import android.content.ClipboardManager
-import com.meta.wearable.dat.core.Wearables
-import com.meta.wearable.dat.core.types.Permission
-import com.meta.wearable.dat.core.types.PermissionStatus
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
@@ -434,9 +431,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         onDone: (() -> Unit)?,
     ) {
         var finished = false
-        fun finish() {
+        fun finish(success: Boolean) {
             if (finished) return
             finished = true
+            AssistantRuntime.update {
+                recordTts(if (success) "Success · BV300 playback" else "Failure · BV300 playback")
+            }
             moyoungReplyPlayer?.release()
             moyoungReplyPlayer = null
             runCatching { file.delete() }
@@ -460,10 +460,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     "BV300 preferred audio device accepted=$preferred " +
                         "name=${outputDevice.productName} address=${outputDevice.address}",
                 )
-                setOnCompletionListener { finish() }
+                setOnCompletionListener { finish(true) }
                 setOnErrorListener { _, what, extra ->
                     Log.e("MoyoungW620", "BV300 $logLabel playback failed what=$what extra=$extra")
-                    finish()
+                    finish(false)
                     true
                 }
                 prepare()
@@ -478,7 +478,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             )
         } catch (error: Throwable) {
             Log.e("MoyoungW620", "Could not play $logLabel through BV300", error)
-            finish()
+            finish(false)
         }
     }
 
@@ -527,8 +527,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
     companion object {
         const val EXTRA_TASKER_COMMAND = "tasker_command"
-        const val EXTRA_START_META_IMAGE_QUESTION = "start_meta_image_question"
         const val ACTION_TEST_BV300_SPEECH = "com.fersaiyan.cyanbridge.TEST_BV300_SPEECH"
+        const val ACTION_SPEAK_CHATGPT_REPLY = "com.fersaiyan.cyanbridge.SPEAK_CHATGPT_REPLY"
+        const val EXTRA_CHATGPT_REPLY = "chatgpt_reply"
         private const val TAG = "MainActivity"
         private var loggedLargeDataHandlerMethods = false
         private const val AI_MODE_PHONE_ASSISTANT = "PhoneAssistant"
@@ -685,7 +686,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val activeVoiceAudioRoute = AtomicReference<VoiceAudioRouteOwner?>(null)
     private val imageThumbnailRequestInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
     private val imageCaptureAwaitingNotification = java.util.concurrent.atomic.AtomicBoolean(false)
-    private val metaPhotoCaptureInProgress = java.util.concurrent.atomic.AtomicBoolean(false)
     private val pendingImageCapturePermit = AtomicReference<BackgroundGlassesCommandPermit?>(null)
     @Volatile
     private var pendingImageCaptureSourceTag: String? = null
@@ -718,7 +718,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var pendingBatteryToast = false
     private var batteryCallbackRegistered = false
     private var enabledFeaturePermissionRequestActive = false
-    private var enabledMetaCameraCheckActive = false
 
     // Chapter 5: meeting capture UI + state
     private val meetingTimerOptions: List<Pair<Long?, String>> = listOf(
@@ -729,11 +728,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     )
     private var meetingCaptureStateReceiver: BroadcastReceiver? = null
 
-    // Meta Ray-Ban integration
-    private var metaRaybanManager: com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager? = null
-    private var metaRaybanUiJob: Job? = null
-    private var pendingMetaDatAction: (() -> Unit)? = null
-    private var pendingMetaCameraAction: (() -> Unit)? = null
     private var meizuMyvuManager: MeizuMyvuManager? = null
     private var meizuMyvuUiJob: Job? = null
     private var meizuMyvuFailureJob: Job? = null
@@ -750,43 +744,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private val tuneBudsAiPhotoInProgress = AtomicBoolean(false)
     private var pendingTransportPermissionAction: (() -> Unit)? = null
 
-    private val metaAndroidPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-            val action = pendingMetaDatAction
-            pendingMetaDatAction = null
-            enabledMetaCameraCheckActive = false
-            if (result.values.all { it }) {
-                val manager = getOrCreateMetaRaybanManager()
-                manager.initialize()
-                if (manager.isInitialized.value) {
-                    action?.invoke()
-                } else {
-                    showMetaError(
-                        "Android/DAT initialization",
-                        manager.lastError.value ?: "Unable to initialize Meta Wearables DAT",
-                    )
-                }
-            } else {
-                val denied = result.filterValues { !it }.keys.joinToString().ifBlank { "unknown" }
-                showMetaError(
-                    "Android permissions",
-                    "Meta needs Bluetooth and camera permissions; denied=$denied",
-                )
-            }
-        }
-
-    private val metaWearablePermissionLauncher =
-        registerForActivityResult(Wearables.RequestPermissionContract()) { result ->
-            val action = pendingMetaCameraAction
-            pendingMetaCameraAction = null
-            enabledMetaCameraCheckActive = false
-            if (result.getOrDefault(PermissionStatus.Denied) == PermissionStatus.Granted) {
-                action?.invoke()
-            } else {
-                showMetaError("DAT camera permission", "Meta camera permission was denied")
-            }
-        }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = AcitivytMainBinding.inflate(layoutInflater)
@@ -800,7 +757,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         refreshGeminiLiveImageDelay()
         setupMeetingCaptureUi()
         setupAgentControlsUi()
-        setupMetaRaybanUi()
         refreshNativePluginShortcutState()
         val appearancePreferences = AppearancePreferences(this)
         // Hide the view-based bottom navigation; the shared CMP nav shell owns it now.
@@ -889,17 +845,15 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         })
 
-        // Ensure we always listen for HeyCyan reports. Meta notifications come from DAT,
-        // so do not register the vendor listener for a selected Meta profile.
-        if (!isMetaRaybanSelected() && !isEyevueSelected() && !isTuneBudsSelected()) {
+        // Vendor notifications are only valid for HeyCyan-compatible glasses.
+        if (!isEyevueSelected() && !isTuneBudsSelected()) {
             LargeDataHandler.getInstance().addOutDeviceListener(100, deviceNotifyListener)
         }
 
         // Lazily register the import/download notify listener the first time we need it.
-        handleMetaRegistrationIntent(intent)
         handleTaskerCommand(intent)
-        maybeStartMetaImageQuestion(intent)
         maybeTestBv300Speech(intent)
+        maybeSpeakChatGptReply(intent)
 
         BatteryOptimizationGuideActivity.launchIfNeeded(this)
     }
@@ -1165,7 +1119,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         refreshGeminiLiveImageDelay()
         refreshNativePluginShortcutState()
         ensureEnabledBackgroundFeaturePermissions()
-        ensureEnabledMetaCameraFeature()
     }
 
     private fun ensureEnabledBackgroundFeaturePermissions() {
@@ -1229,26 +1182,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun ensureEnabledMetaCameraFeature() {
-        if (!isMetaRaybanSelected() || !hasNotificationPermission(this)) return
-        if (!WalkingAidPreferences.isEnabled(this) && !VisualDiaryPreferences.isEnabled(this)) return
-        if (enabledMetaCameraCheckActive) return
-
-        enabledMetaCameraCheckActive = true
-        ensureMetaCameraReady {
-            enabledMetaCameraCheckActive = false
-            if (WalkingAidPreferences.isEnabled(this)) WalkingAidService.start(this)
-            if (VisualDiaryPreferences.isEnabled(this)) VisualDiaryService.startIfEnabled(this)
-        }
-    }
-
     private fun startEnabledCameraFeatures() {
-        if (isMetaRaybanSelected()) {
-            if (WalkingAidPreferences.isEnabled(this) || VisualDiaryPreferences.isEnabled(this)) {
-                ensureEnabledMetaCameraFeature()
-            }
-            return
-        }
         if (WalkingAidPreferences.isEnabled(this)) WalkingAidService.start(this)
         if (VisualDiaryPreferences.isEnabled(this)) VisualDiaryService.startIfEnabled(this)
     }
@@ -1256,32 +1190,64 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (handleMetaRegistrationIntent(intent)) {
-            updateMetaRaybanUiState()
-        }
         handleTaskerCommand(intent)
-        maybeStartMetaImageQuestion(intent)
         maybeTestBv300Speech(intent)
+        maybeSpeakChatGptReply(intent)
     }
 
     private fun maybeTestBv300Speech(sourceIntent: Intent) {
         if (sourceIntent.action != ACTION_TEST_BV300_SPEECH) return
         sourceIntent.action = null
-        binding.root.post {
+        lifecycleScope.launch {
+            awaitBv300TtsReady()
             speakMoyoungReply("BV300 assistant speech test")
         }
     }
 
-    private fun handleMetaRegistrationIntent(callbackIntent: Intent): Boolean {
-        if (!callbackIntent.data?.scheme.equals("cyanbridge", ignoreCase = true)) return false
-        val manager = getOrCreateMetaRaybanManager()
-        return manager.handleRegistrationCallback(callbackIntent)
+    private suspend fun awaitBv300TtsReady(): Boolean {
+        repeat(50) {
+            if (ttsReady && tts != null) return true
+            delay(200)
+        }
+        return false
     }
 
-    private fun maybeStartMetaImageQuestion(sourceIntent: Intent) {
-        if (!sourceIntent.getBooleanExtra(EXTRA_START_META_IMAGE_QUESTION, false)) return
-        sourceIntent.removeExtra(EXTRA_START_META_IMAGE_QUESTION)
-        binding.root.post(::startImageQuestionFromUi)
+    private fun maybeSpeakChatGptReply(sourceIntent: Intent) {
+        Log.i("ChatGptUiBridge", "MainActivity intent action=${sourceIntent.action}")
+        if (sourceIntent.action != ACTION_SPEAK_CHATGPT_REPLY) return
+        val reply = sourceIntent.getStringExtra(EXTRA_CHATGPT_REPLY)?.trim().orEmpty()
+        Log.i("ChatGptUiBridge", "MainActivity received reply length=${reply.length}")
+        sourceIntent.action = null
+        sourceIntent.removeExtra(EXTRA_CHATGPT_REPLY)
+        if (reply.isBlank()) return
+        lifecycleScope.launch {
+            if (!awaitBv300TtsReady()) {
+                AssistantRuntime.update { fail("Local TTS did not initialize for BV300 playback") }
+                return@launch
+            }
+            Log.i("ChatGptUiBridge", "Starting BV300 TTS; ready=$ttsReady")
+            val chunks = reply.chunked(3200)
+            fun play(index: Int) {
+                if (index >= chunks.size) {
+                    if (AssistantRuntime.snapshot.value.lastTts.startsWith("Success")) {
+                        if (AssistantRuntime.snapshot.value.phase == AssistantPhase.SPEAKING) {
+                            AssistantRuntime.update { speechFinished() }
+                        }
+                    } else {
+                        AssistantRuntime.update { fail("ChatGPT reply arrived, but BV300 playback failed") }
+                    }
+                    return
+                }
+                speakMoyoungReply(chunks[index]) {
+                    if (AssistantRuntime.snapshot.value.lastTts.startsWith("Failure")) {
+                        AssistantRuntime.update { fail("ChatGPT reply arrived, but BV300 playback failed") }
+                    } else {
+                        play(index + 1)
+                    }
+                }
+            }
+            play(0)
+        }
     }
 
     private fun startImageQuestionFromUi() {
@@ -1327,37 +1293,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
         return false
-    }
-
-    private fun getOrCreateMetaRaybanManager(): com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager {
-        return metaRaybanManager
-            ?: com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
-                .getInstance(this)
-                .also { manager ->
-                    metaRaybanManager = manager
-                    observeMetaRaybanState(manager)
-                }
-    }
-
-    private fun observeMetaRaybanState(
-        manager: com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager,
-    ) {
-        if (metaRaybanUiJob != null) return
-        metaRaybanUiJob = lifecycleScope.launch {
-            merge(
-                manager.registrationState.map { Unit },
-                manager.deviceSessionState.map { Unit },
-                manager.streamState.map { Unit },
-                manager.isDisplayActive.map { Unit },
-                manager.selectedDeviceIsDisplayCapable.map { Unit },
-                manager.availableDeviceCount.map { Unit },
-                manager.selectedDeviceName.map { Unit },
-                manager.lastError.map { Unit },
-            ).collect {
-                updateMetaRaybanUiState()
-                if (isMetaRaybanSelected()) updateConnectionStatus(false)
-            }
-        }
     }
 
     private fun getOrCreateMeizuMyvuManager(): MeizuMyvuManager =
@@ -1574,53 +1509,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-    private fun metaAndroidPermissionsMissing(): Array<String> {
-        val permissions = mutableListOf(Manifest.permission.CAMERA)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissions += Manifest.permission.BLUETOOTH_CONNECT
-            permissions += Manifest.permission.BLUETOOTH_SCAN
-        }
-        return permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }.toTypedArray()
-    }
-
-    private fun ensureMetaDatReady(action: () -> Unit) {
-        val missing = metaAndroidPermissionsMissing()
-        if (missing.isNotEmpty()) {
-            pendingMetaDatAction = action
-            metaAndroidPermissionLauncher.launch(missing)
-            return
-        }
-
-        val manager = getOrCreateMetaRaybanManager()
-        manager.initialize()
-        if (manager.isInitialized.value) {
-            action()
-        } else {
-            showMetaError(
-                "Android/DAT initialization",
-                manager.lastError.value ?: "Unable to initialize Meta Wearables DAT",
-            )
-        }
-    }
-
-    private fun ensureMetaCameraReady(action: () -> Unit) {
-        ensureMetaDatReady {
-            val manager = getOrCreateMetaRaybanManager()
-            manager.checkCameraPermission(
-                onGranted = action,
-                onRequestNeeded = {
-                    pendingMetaCameraAction = action
-                    metaWearablePermissionLauncher.launch(Permission.CAMERA)
-                },
-                onError = { error ->
-                    showMetaError("DAT camera permission", error)
-                },
-            )
-        }
-    }
-
     inner class BluetoothPermissionCallback : OnPermissionCallback {
         override fun onGranted(permissions: MutableList<String>, all: Boolean) {
             if (all) {
@@ -1794,14 +1682,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun isGlassesCommandBlocked(source: String): Boolean {
         val activeSession = GlassesSessionCoordinator.currentSession() ?: return false
-        if (activeSession == GlassesSession.META_CAMERA &&
-            isMetaRaybanSelected() &&
-            source == "voice-query command"
-        ) {
-            // Meta voice queries use Android's audio route and do not contend for the
-            // HeyCyan SDK response slot owned by the DAT camera session.
-            return false
-        }
         Log.w(
             "GlassesSession",
             "Skipping $source; ${activeSession.label} owns the SDK BLE/P2P slots",
@@ -1839,38 +1719,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             action is GlassesDashboardAction.SelectImageThumbnailQuality ||
             action is GlassesDashboardAction.SetGeminiLiveImageDelay ||
             action is GlassesDashboardAction.SetAiWakeWordRoute ||
-            action == GlassesDashboardAction.DismissFirmwarePatchRequest ||
-            action == GlassesDashboardAction.MetaSendDiagnostics
+            action == GlassesDashboardAction.DismissFirmwarePatchRequest
         ) {
             return false
         }
         val activeSession = GlassesSessionCoordinator.currentSession() ?: return false
         val isAllowed = if (activeSession == GlassesSession.WIFI_ADB_DEBUG) {
             action == GlassesDashboardAction.StopWifiAdbDebug
-        } else if (activeSession == GlassesSession.META_CAMERA) {
-            when (action) {
-                is GlassesDashboardAction.Navigate,
-                GlassesDashboardAction.StartMeetingCapture,
-                GlassesDashboardAction.StopMeetingCapture,
-                is GlassesDashboardAction.RunNativePluginShortcut,
-                is GlassesDashboardAction.SelectAssistantMode,
-                GlassesDashboardAction.TestVoiceQuestion,
-                GlassesDashboardAction.TestImageQuestion,
-                GlassesDashboardAction.OpenExternalImageAutomationDiagnostics,
-                GlassesDashboardAction.StartAgent,
-                GlassesDashboardAction.StopAgent,
-                GlassesDashboardAction.RunAgentDemo,
-                GlassesDashboardAction.MetaStopSession,
-                GlassesDashboardAction.MetaStopStream,
-                GlassesDashboardAction.MetaStopDisplay,
-                GlassesDashboardAction.MetaCapturePhoto,
-                GlassesDashboardAction.MetaViewPhoto,
-                GlassesDashboardAction.MetaStartSession,
-                GlassesDashboardAction.MetaStartStream,
-                GlassesDashboardAction.MetaStartDisplay,
-                GlassesDashboardAction.MetaSendDiagnostics -> true
-                else -> false
-            }
         } else {
             when (action) {
                 is GlassesDashboardAction.Navigate -> true
@@ -1907,8 +1762,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     startKtxActivity<DeviceBindActivity>()
                 } else if (isMeizuMyvuSelected()) {
                     startKtxActivity<DeviceBindActivity>()
-                } else if (isMetaRaybanSelected()) {
-                    startKtxActivity<DeviceBindActivity>()
                 } else {
                     binding.btnScan.performClick()
                 }
@@ -1930,8 +1783,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     DeviceProfileStore.loadLastSelected(this)?.macAddress?.let {
                         getOrCreateMeizuMyvuManager().connect(it, this, userInitiated = true)
                     } ?: startKtxActivity<DeviceBindActivity>()
-                } else if (isMetaRaybanSelected()) {
-                    startActivity(Intent(this, MetaPairingActivity::class.java))
                 } else {
                     binding.btnConnect.performClick()
                 }
@@ -1947,9 +1798,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     getOrCreateTuneBudsManager().disconnect()
                 } else if (isMeizuMyvuSelected()) {
                     getOrCreateMeizuMyvuManager().disconnect()
-                } else if (isMetaRaybanSelected()) {
-                    metaRaybanManager?.stopSession()
-                    updateConnectionStatus(false)
                 } else {
                     binding.btnDisconnect.performClick()
                 }
@@ -2141,20 +1989,19 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             GlassesDashboardAction.StopWifiAdbDebug -> {
                 if (BuildConfig.DEBUG && isHeyCyanSelected()) wifiAdbDebugController.stop()
             }
-            GlassesDashboardAction.MetaRegister -> binding.btnMetaRegister.performClick()
-            GlassesDashboardAction.MetaOpenPairing ->
-                startActivity(Intent(this, MetaPairingActivity::class.java))
-            GlassesDashboardAction.MetaOpenMetaAi -> openMetaAiAppOrStore()
-            GlassesDashboardAction.MetaUnregister -> binding.btnMetaUnregister.performClick()
-            GlassesDashboardAction.MetaStartSession -> binding.btnMetaSessionStart.performClick()
-            GlassesDashboardAction.MetaStopSession -> binding.btnMetaSessionStop.performClick()
-            GlassesDashboardAction.MetaStartStream -> binding.btnMetaStreamStart.performClick()
-            GlassesDashboardAction.MetaStopStream -> binding.btnMetaStreamStop.performClick()
-            GlassesDashboardAction.MetaCapturePhoto -> binding.btnMetaCapturePhoto.performClick()
-            GlassesDashboardAction.MetaViewPhoto -> binding.btnMetaViewPhoto.performClick()
-            GlassesDashboardAction.MetaStartDisplay -> binding.btnMetaDisplayStart.performClick()
-            GlassesDashboardAction.MetaStopDisplay -> binding.btnMetaDisplayStop.performClick()
-            GlassesDashboardAction.MetaSendDiagnostics -> showMetaDiagnostics()
+            GlassesDashboardAction.MetaRegister,
+            GlassesDashboardAction.MetaOpenPairing,
+            GlassesDashboardAction.MetaOpenMetaAi,
+            GlassesDashboardAction.MetaUnregister,
+            GlassesDashboardAction.MetaStartSession,
+            GlassesDashboardAction.MetaStopSession,
+            GlassesDashboardAction.MetaStartStream,
+            GlassesDashboardAction.MetaStopStream,
+            GlassesDashboardAction.MetaCapturePhoto,
+            GlassesDashboardAction.MetaViewPhoto,
+            GlassesDashboardAction.MetaStartDisplay,
+            GlassesDashboardAction.MetaStopDisplay,
+            GlassesDashboardAction.MetaSendDiagnostics -> Unit
             GlassesDashboardAction.MeizuConnect -> {
                 DeviceProfileStore.loadLastSelected(this)?.macAddress?.let {
                     getOrCreateMeizuMyvuManager().connect(it, this, userInitiated = true)
@@ -2373,14 +2220,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             ).show()
             return
         }
-        if (isMetaRaybanSelected() && pluginId == NativePluginIds.AUTO_AUDIO) {
-            Toast.makeText(
-                this,
-                "Auto Audio records HeyCyan onboard files and is unavailable for Meta Ray-Ban.",
-                Toast.LENGTH_LONG,
-            ).show()
-            return
-        }
         val start = {
             when (pluginId) {
                 NativePluginIds.AUTO_DIARY -> AutoDiaryService.enable(this)
@@ -2421,25 +2260,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
             }
             refreshNativePluginShortcutState()
-        }
-
-        if (isMetaRaybanSelected() &&
-            pluginId in setOf(NativePluginIds.WALKING_AID, NativePluginIds.VISUAL_DIARY)
-        ) {
-            val manager = getOrCreateMetaRaybanManager()
-            if (!manager.isInitialized.value) manager.initialize()
-            lifecycleScope.launch {
-                if (!manager.awaitCameraReady()) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Register and connect a Meta camera before starting this plugin.",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    return@launch
-                }
-                ensureMetaCameraReady(start)
-            }
-            return
         }
 
         if (pluginId == NativePluginIds.WALKING_AID ||
@@ -2555,27 +2375,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     "${activeSession.label.replaceFirstChar { it.uppercase() }} is using the glasses connection.",
                     Toast.LENGTH_SHORT,
                 ).show()
-                return@setOnClickListener
-            }
-
-            if (isMetaRaybanSelected() && this in setOf(
-                    binding.btnConnect,
-                    binding.btnDisconnect,
-                    binding.btnAddListener,
-                    binding.btnSetTime,
-                    binding.btnVersion,
-                    binding.btnVideo,
-                    binding.btnRecord,
-                    binding.btnBt,
-                    binding.btnBattery,
-                    binding.btnVolume,
-                    binding.btnMediaCount,
-                    binding.btnDataDownload,
-                    binding.btnOtaInfo,
-                    binding.btnPullOtaTest,
-                )
-            ) {
-                rejectHeyCyanOnlyFeature("This HeyCyan control")
                 return@setOnClickListener
             }
 
@@ -2719,10 +2518,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
 
                 binding.btnCamera -> {
-                    if (isMetaRaybanSelected()) {
-                        captureMetaPhotoForGallery()
-                        return@setOnClickListener
-                    }
                     val permit = acquireBackgroundGlassesCommand("camera command")
                         ?: return@setOnClickListener
                     try {
@@ -2891,7 +2686,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun dumpOtaServerInfo() {
-        if (rejectHeyCyanOnlyFeature("HeyCyan OTA")) return
         if (!BleOperateManager.getInstance().isConnected) {
             Log.e("OTAProbe", "Bluetooth not connected. Please connect to glasses first.")
             Toast.makeText(
@@ -3035,7 +2829,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
      * yourself and point TEST_PULL_OTA_URL at it.
      */
     private fun testPullModeOta() {
-        if (rejectHeyCyanOnlyFeature("HeyCyan pull-mode OTA")) return
         if (!BuildConfig.DEBUG) {
             Log.w("PullOtaTest", "Pull-mode OTA testing is disabled outside debug builds")
             Toast.makeText(this, "Pull-mode OTA testing is available only in debug builds.", Toast.LENGTH_LONG).show()
@@ -3108,7 +2901,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun requestOtaFirmware(source: OtaFirmwareSource) {
-        if (rejectHeyCyanOnlyFeature("HeyCyan OTA")) return
         if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
             ensureGlassesTransportPermissions("Wi-Fi OTA") {
                 requestOtaFirmware(source)
@@ -3728,7 +3520,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun startLivePreview() {
         Log.i("LivePreview", "========================================")
 
-        if (rejectHeyCyanOnlyFeature("Live preview")) return
 
         if (!BuildConfig.DEBUG) {
             Log.w("LivePreview", "Passive live preview is unavailable outside debug builds")
@@ -3950,7 +3741,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
     
     private fun controlVideoRecording(start: Boolean) {
-        if (rejectHeyCyanOnlyFeature("Video recording")) return
         if (isGlassesCommandBlocked("video recording command")) return
         val permit = acquireBackgroundGlassesCommand("video recording command") ?: return
         val value = if (start) 0x02 else 0x03
@@ -4000,7 +3790,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
     
     private fun controlAudioRecording(start: Boolean) {
-        if (rejectHeyCyanOnlyFeature("On-glasses audio recording")) return
         if (isGlassesCommandBlocked("audio recording command")) return
         val permit = acquireBackgroundGlassesCommand("audio recording command") ?: return
         val value = if (start) 0x08 else 0x0c
@@ -4047,12 +3836,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun stopGlassesAiAudio(source: String) {
-        if (isMetaRaybanSelected()) {
-            // Meta audio is managed by DAT/Android audio routing; never send Oudmon
-            // command bytes to a Meta wearable.
-            Log.d("AIHijack", "Skipping HeyCyan AI-audio stop for Meta ($source)")
-            return
-        }
         if (isGlassesCommandBlocked(source)) return
         val permit = acquireBackgroundGlassesCommand(source) ?: return
         try {
@@ -4846,10 +4629,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         pendingImageThumbnailQuality = thumbnailQuality
         pendingImageCaptureStartedAtMs = System.currentTimeMillis()
         pendingImageQuestionOfferSpokenQuestion = offerSpokenQuestion
-        if (isMetaRaybanSelected()) {
-            captureMetaImageForQuestion(sourceTag)
-            return
-        }
         if (isEyevueSelected()) {
             captureEyevueImageForQuestion(sourceTag, offerSpokenQuestion)
             return
@@ -4965,40 +4744,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         when (pendingImageQuestionSource) {
             ImageQuestionSource.HIGH_QUALITY -> requestHighQualityImageForQuestion(sourceTag)
             ImageQuestionSource.FAST_PREVIEW -> requestImageThumbnailForQuestion(sourceTag)
-        }
-    }
-
-    private fun captureMetaImageForQuestion(sourceTag: String) {
-        ensureMetaCameraReady {
-            if (!metaPhotoCaptureInProgress.compareAndSet(false, true)) {
-                Log.i("AIHijack", "[$sourceTag] Meta photo capture already in progress")
-                return@ensureMetaCameraReady
-            }
-
-            val manager = getOrCreateMetaRaybanManager()
-            lifecycleScope.launch(Dispatchers.IO) {
-                runCatching {
-                    val photo = manager.capturePhotoOnce()
-                    manager.savePhotoForProcessing(photo, "META_AI_$sourceTag")
-                }.onSuccess { file ->
-                    withContext(Dispatchers.Main) {
-                        onImageReadyForQuestion(
-                            imagePath = file.absolutePath,
-                            source = ImageQuestionSource.HIGH_QUALITY,
-                            transferDurationMs = System.currentTimeMillis() - pendingImageCaptureStartedAtMs,
-                        )
-                    }
-                }.onFailure { error ->
-                    clearPendingVoiceImageQuestion(sourceTag)
-                    withContext(Dispatchers.Main) {
-                        showMetaError(
-                            "AI photo capture ($sourceTag)",
-                            error.message ?: "capture failed",
-                        )
-                    }
-                }
-                metaPhotoCaptureInProgress.set(false)
-            }
         }
     }
 
@@ -6279,7 +6024,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         return imageQueryInProgress.get() ||
             imageCaptureAwaitingNotification.get() ||
             imageThumbnailRequestInProgress.get() ||
-            metaPhotoCaptureInProgress.get() ||
             eyevueAiPhotoInProgress.get() ||
             highQualityImageRequest != null ||
             activeParallelAudioQuestionJob?.isActive == true
@@ -6354,6 +6098,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val preparedPcm16 = Bv300AudioPreprocessor.prepare(
                     pcm16 = audio.pcm16,
                     sampleRateHz = audio.sampleRateHz,
+                    compactSilence = !manualHandoff,
                 )
                 Log.i(
                     "MoyoungW620",
@@ -6387,8 +6132,14 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         if (voiceQueryInProgress.compareAndSet(queryToken, null)) {
                             finishAiQuestionForegroundWork()
                         }
-                        Toast.makeText(this@MainActivity, "Message prepared. Review it in BV300 Assistant.", Toast.LENGTH_LONG).show()
-                        startActivity(Intent(this@MainActivity, AssistantSettingsActivity::class.java))
+                        val sent = AssistantPreferences.autoSendMode(this@MainActivity) &&
+                            ChatGptUiAutomation.send(this@MainActivity, prompt)
+                        if (!sent && !isDeviceLockedForAutomation()) {
+                            Toast.makeText(this@MainActivity, "Message prepared. Review it in BV300 Assistant.", Toast.LENGTH_LONG).show()
+                            startActivity(Intent(this@MainActivity, AssistantSettingsActivity::class.java))
+                        } else if (!sent) {
+                            Log.i("MoyoungW620", "ChatGPT handoff deferred until the phone is unlocked")
+                        }
                     }
                     return@launch
                 }
@@ -6814,21 +6565,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             updateDeviceClassText()
             return
         }
-        if (isMetaRaybanSelected()) {
-            val manager = getOrCreateMetaRaybanManager()
-            val status = when {
-                !manager.isInitialized.value -> "Meta Ray-Ban selected"
-                manager.isCameraReady() -> "Meta Ray-Ban ready"
-                manager.registrationState.value == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.RegistrationState.REGISTERED ->
-                    "Meta Ray-Ban registered"
-                else -> "Meta Ray-Ban not registered"
-            }
-            binding.statusText.text = status
-            updateDashboardState { state -> state.copy(connectionLabel = status) }
-            updateDeviceClassText()
-            return
-        }
-
         val deviceName = DeviceManager.getInstance().deviceName
         val status = if (connected) {
             if (!deviceName.isNullOrBlank()) {
@@ -6963,8 +6699,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun isMetaRaybanSelected(): Boolean = DeviceProfileStore.isMetaSelected(this)
-
     private fun isMeizuMyvuSelected(): Boolean = DeviceProfileStore.isMeizuMyvuSelected(this)
 
     private fun isEyevueSelected(): Boolean =
@@ -6984,16 +6718,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             com.fersaiyan.cyanbridge.shared.devices.DeviceClass.EYEVUE,
         )
 
-    private fun rejectHeyCyanOnlyFeature(feature: String): Boolean {
-        if (!isMetaRaybanSelected()) return false
-        Toast.makeText(
-            this,
-            "$feature is unavailable for Meta Ray-Ban. Use the DAT controls instead.",
-            Toast.LENGTH_LONG,
-        ).show()
-        return true
-    }
-
     private fun updateDeviceClassText() {
         val profile = DeviceProfileStore.loadLastSelected(this)
         val classLabel = profile?.selectedClass?.displayName() ?: "Unknown"
@@ -7011,9 +6735,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         binding.layoutHeycyanExtras.visibility =
             if (model.isVisible(GlassesManagerGating.Action.HEY_CYAN_EXTRAS)) android.view.View.VISIBLE else android.view.View.GONE
 
-        // Meta Ray-Ban controls panel
-        binding.layoutMetaRayban.visibility =
-            if (model.isVisible(GlassesManagerGating.Action.META_RAYBAN_CONTROLS)) android.view.View.VISIBLE else android.view.View.GONE
+        binding.layoutMetaRayban.visibility = View.GONE
 
         // Status placeholders
         val showBattery = model.isVisible(GlassesManagerGating.Action.STATUS_BATTERY)
@@ -7045,7 +6767,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     model.isVisible(GlassesManagerGating.Action.ADVANCED_OTA)
                 },
                 aiWakeWordRoute = AiWakeWordPreferences.route(this),
-                showMetaRaybanControls = model.isVisible(GlassesManagerGating.Action.META_RAYBAN_CONTROLS),
+                showMetaRaybanControls = false,
                 showMeizuMyvuControls = model.isVisible(GlassesManagerGating.Action.MEIZU_MYVU_CONTROLS),
                 showBattery = showBattery,
                 showStorage = showStorage,
@@ -7076,15 +6798,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
         if (!showStorage) {
             binding.storageText.text = "--"
-        }
-
-        // Initialize Meta Ray-Ban manager if needed
-        if (model.isVisible(GlassesManagerGating.Action.META_RAYBAN_CONTROLS)) {
-            val manager = getOrCreateMetaRaybanManager()
-            if (metaAndroidPermissionsMissing().isEmpty()) {
-                manager.initialize()
-            }
-            updateMetaRaybanUiState()
         }
 
         if (model.isVisible(GlassesManagerGating.Action.MEIZU_MYVU_CONTROLS)) {
@@ -7167,282 +6880,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             state.copy(
                 agentStatus = LocalAgentPrefs.getStatus(this),
                 agentLastError = LocalAgentPrefs.getLastError(this),
-            )
-        }
-    }
-
-    // --- Meta Ray-Ban UI setup ---
-
-    private fun setupMetaRaybanUi() {
-        // Registration buttons
-        binding.btnMetaRegister.setOnClickListener {
-            ensureMetaDatReady {
-                getOrCreateMetaRaybanManager().startRegistration(this)
-            }
-        }
-
-        binding.btnMetaUnregister.setOnClickListener {
-            ensureMetaDatReady {
-                getOrCreateMetaRaybanManager().startUnregistration(this)
-            }
-        }
-
-        // Session buttons
-        binding.btnMetaSessionStart.setOnClickListener {
-            ensureMetaDatReady {
-                getOrCreateMetaRaybanManager().startSession(
-                    onSuccess = {
-                        runOnUiThread {
-                            Toast.makeText(this, "Meta session started", Toast.LENGTH_SHORT).show()
-                            updateMetaRaybanUiState()
-                        }
-                    },
-                    onError = { error ->
-                        runOnUiThread {
-                            showMetaError("DAT session", error)
-                        }
-                    },
-                )
-            }
-        }
-
-        binding.btnMetaSessionStop.setOnClickListener {
-            metaRaybanManager?.stopSession()
-            updateMetaRaybanUiState()
-        }
-
-        // Streaming buttons
-        binding.btnMetaStreamStart.setOnClickListener {
-            ensureMetaCameraReady {
-                getOrCreateMetaRaybanManager().startStreaming(
-                    onFrame = { bitmap ->
-                        Log.d(TAG, "Received Meta video frame: ${bitmap.width}x${bitmap.height}")
-                    },
-                    onSuccess = {
-                        runOnUiThread {
-                            Toast.makeText(this, "Streaming started", Toast.LENGTH_SHORT).show()
-                            updateMetaRaybanUiState()
-                        }
-                    },
-                    onError = { error ->
-                        runOnUiThread {
-                            showMetaError("DAT stream", error)
-                        }
-                    },
-                )
-            }
-        }
-
-        binding.btnMetaStreamStop.setOnClickListener {
-            metaRaybanManager?.stopStreaming()
-            updateMetaRaybanUiState()
-        }
-
-        // Photo capture button
-        binding.btnMetaCapturePhoto.setOnClickListener {
-            metaRaybanManager?.capturePhoto(
-                onSuccess = { photoData ->
-                    runOnUiThread {
-                        Toast.makeText(this, "Photo captured!", Toast.LENGTH_SHORT).show()
-                        binding.btnMetaViewPhoto.isEnabled = true
-                        updateDashboardState { state ->
-                            state.copy(metaRayban = state.metaRayban.copy(hasCapturedPhoto = true))
-                        }
-                    }
-                },
-                onError = { error ->
-                    runOnUiThread {
-                        showMetaError("DAT photo capture", error)
-                    }
-                }
-            )
-        }
-
-        // View last photo button
-        binding.btnMetaViewPhoto.setOnClickListener {
-            val photo = metaRaybanManager?.lastCapturedPhoto?.value
-            val uri = photo?.uri
-            if (uri != null) {
-                runCatching {
-                    startActivity(
-                        Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(uri, photo.mimeType)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        },
-                    )
-                }.onFailure {
-                    Toast.makeText(this, "No photo viewer is installed", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                Toast.makeText(this, "No captured Meta photo is available", Toast.LENGTH_SHORT).show()
-            }
-        }
-
-        // Display buttons
-        binding.btnMetaDisplayStart.setOnClickListener {
-            ensureMetaDatReady {
-                getOrCreateMetaRaybanManager().startDisplay(
-                    onSuccess = {
-                        runOnUiThread {
-                            Toast.makeText(this, "Display started", Toast.LENGTH_SHORT).show()
-                            updateMetaRaybanUiState()
-                        }
-                    },
-                    onError = { error ->
-                        runOnUiThread {
-                            showMetaError("DAT display", error)
-                        }
-                    }
-                )
-            }
-        }
-
-        binding.btnMetaDisplayStop.setOnClickListener {
-            metaRaybanManager?.stopDisplay()
-            updateMetaRaybanUiState()
-        }
-    }
-
-    private fun captureMetaPhotoForGallery() {
-        ensureMetaCameraReady {
-            val manager = getOrCreateMetaRaybanManager()
-            lifecycleScope.launch(Dispatchers.IO) {
-                runCatching { manager.capturePhotoOnce() }
-                    .onSuccess {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(this@MainActivity, "Meta photo captured", Toast.LENGTH_SHORT).show()
-                            updateMetaRaybanUiState()
-                        }
-                    }
-                    .onFailure { error ->
-                        withContext(Dispatchers.Main) {
-                            showMetaError(
-                                "DAT background photo",
-                                error.message ?: "camera unavailable",
-                            )
-                        }
-                    }
-            }
-        }
-    }
-
-    private fun showMetaDiagnostics() {
-        val manager = getOrCreateMetaRaybanManager()
-        DebugLogSupport.showSupportOptionsDialog(
-            activity = this,
-            title = getString(R.string.meta_diagnostics_title),
-            issueType = "Meta Ray-Ban / DAT",
-            description = getString(R.string.meta_diagnostics_description),
-            extraInfo = linkedMapOf(
-                "Meta DAT snapshot" to manager.diagnosticsSnapshot(),
-            ),
-            dismissButtonLabel = getString(R.string.action_cancel),
-        )
-    }
-
-    private fun openMetaAiAppOrStore() {
-        val manager = getOrCreateMetaRaybanManager()
-        val launchIntent = manager.installedMetaAiPackageName()
-            ?.let(packageManager::getLaunchIntentForPackage)
-        if (launchIntent != null) {
-            startActivity(launchIntent)
-            return
-        }
-        runCatching {
-            startActivity(
-                Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.facebook.stella"))
-                    .setPackage("com.android.vending"),
-            )
-        }.recoverCatching {
-            startActivity(
-                Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse("https://play.google.com/store/apps/details?id=com.facebook.stella"),
-                ),
-            )
-        }.onFailure {
-            Toast.makeText(this, "Could not open the Meta AI download page", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    private fun showMetaError(operation: String, message: String) {
-        val manager = getOrCreateMetaRaybanManager()
-        val detail = manager.lastError.value?.takeIf { it.isNotBlank() } ?: message
-        Log.e(
-            "MainActivity",
-            "$operation failed: $detail\n${manager.diagnosticsSnapshot()}",
-        )
-        updateMetaRaybanUiState()
-        Toast.makeText(this, "$operation: $detail", Toast.LENGTH_LONG).show()
-    }
-
-    private fun updateMetaRaybanUiState() {
-        val manager = metaRaybanManager ?: return
-        manager.refreshRegistrationState()
-
-        // Update registration status
-        val regState = manager.registrationState.value
-        binding.tvMetaRegistrationStatus.text = "Registration: ${regState.name}"
-
-        // Update session state
-        val sessionState = manager.deviceSessionState.value
-        binding.tvMetaSessionState.text = "Session: ${sessionState.name}"
-
-        // Update stream state
-        val streamState = manager.streamState.value
-        binding.tvMetaStreamState.text = "Stream: ${streamState.name}"
-
-        // Update display state
-        val isDisplayActive = manager.isDisplayActive.value
-        val displayCapable = manager.selectedDeviceIsDisplayCapable.value
-        binding.layoutMetaDisplay.visibility = if (displayCapable) View.VISIBLE else View.GONE
-        binding.tvMetaDisplayState.text = "Display: ${if (isDisplayActive) "Active" else "Inactive"}"
-
-        // Enable/disable buttons based on state
-        binding.btnMetaRegister.isEnabled = regState != com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.RegistrationState.REGISTERED &&
-            regState != com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.RegistrationState.REGISTERING
-        binding.btnMetaUnregister.isEnabled = regState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.RegistrationState.REGISTERED
-
-        binding.btnMetaSessionStart.isEnabled = regState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.RegistrationState.REGISTERED &&
-            manager.availableDeviceCount.value > 0 &&
-            sessionState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.DeviceSessionState.IDLE
-        binding.btnMetaSessionStop.isEnabled = sessionState != com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.DeviceSessionState.IDLE
-
-        binding.btnMetaStreamStart.isEnabled = sessionState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.DeviceSessionState.STARTED &&
-            streamState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.StreamState.STOPPED
-        binding.btnMetaStreamStop.isEnabled = streamState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.StreamState.STREAMING
-
-        binding.btnMetaCapturePhoto.isEnabled = streamState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.StreamState.STREAMING
-
-        binding.btnMetaViewPhoto.isEnabled = manager.lastCapturedPhoto.value != null
-        binding.btnMetaDisplayStart.isEnabled = displayCapable && sessionState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.DeviceSessionState.STARTED && !isDisplayActive
-        binding.btnMetaDisplayStop.isEnabled = displayCapable && isDisplayActive
-        updateDashboardState { state ->
-            state.copy(
-                metaRayban = MetaRaybanUiState(
-                    registrationLabel = regState.name,
-                    sessionLabel = sessionState.name,
-                    streamLabel = streamState.name,
-                    selectedDeviceName = manager.selectedDeviceName.value,
-                    availableDeviceCount = manager.availableDeviceCount.value,
-                    setupGuidance = manager.registrationGuidance(),
-                    lastError = manager.lastError.value,
-                    metaAiInstalled = manager.isMetaAiInstalled(),
-                    displayCapable = displayCapable,
-                    displayActive = isDisplayActive,
-                    canRegister = regState != com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.RegistrationState.REGISTERED &&
-                        regState != com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.RegistrationState.REGISTERING,
-                    canUnregister = regState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.RegistrationState.REGISTERED,
-                    canStartSession = regState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.RegistrationState.REGISTERED &&
-                        manager.availableDeviceCount.value > 0 &&
-                        sessionState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.DeviceSessionState.IDLE,
-                    canStopSession = sessionState != com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.DeviceSessionState.IDLE,
-                    canStartStream = sessionState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.DeviceSessionState.STARTED &&
-                        streamState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.StreamState.STOPPED,
-                    canStopStream = streamState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.StreamState.STREAMING,
-                    canCapturePhoto = streamState == com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager.StreamState.STREAMING,
-                    hasCapturedPhoto = manager.lastCapturedPhoto.value != null,
-                ),
             )
         }
     }
@@ -7616,7 +7053,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun requestBatteryStatus(showToast: Boolean) {
-        if (rejectHeyCyanOnlyFeature("Battery status")) return
         if (isGlassesCommandBlocked("battery status request")) return
         if (showToast) {
             pendingBatteryToast = true
@@ -8306,7 +7742,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         afterP2pTeardown: Boolean = false,
         purpose: MediaDownloadPurpose = MediaDownloadPurpose.FULL_SYNC,
     ) {
-        if (rejectHeyCyanOnlyFeature("Wi-Fi media sync")) return
 
         if (!hasBluetooth(this) || !hasWifiP2pPermission(this)) {
             ensureGlassesTransportPermissions("Wi-Fi media sync") {

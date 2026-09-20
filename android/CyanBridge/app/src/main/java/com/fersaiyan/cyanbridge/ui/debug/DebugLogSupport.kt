@@ -16,7 +16,6 @@ import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionServerPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
-import com.fersaiyan.cyanbridge.devices.metarayban.MetaRaybanManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.localagent.LocalAgentAccessibilityBridge
 import com.fersaiyan.cyanbridge.localagent.LocalAgentDeviceState
@@ -71,9 +70,6 @@ object DebugLogSupport {
         "LocalAgentService",
         "LocalAgentSteps",
         "MainActivity",
-        "MetaRaybanManager",
-        "DAT:CORE:RegistrationManager",
-        "DAT:CORE:BluetoothDeviceDetection",
         "MeizuMyvu",
         "MeizuMyvuService",
         "myvu",
@@ -252,13 +248,6 @@ object DebugLogSupport {
                 append("Remote base URL: ${RemoteOpenAiPrefs.getBaseUrl(context)}\n")
             }
             appendAutomationDiagnostics(context)
-
-            if (DeviceProfileStore.isMetaSelected(context)) {
-                append("Meta Ray-Ban profile: selected\n")
-                append("Meta DAT diagnostics:\n")
-                append(MetaRaybanManager.getInstance(context).diagnosticsSnapshot())
-                append("\n")
-            }
 
             if (DeviceProfileStore.isMeizuMyvuSelected(context)) {
                 append("Meizu MYVU profile: selected\n")

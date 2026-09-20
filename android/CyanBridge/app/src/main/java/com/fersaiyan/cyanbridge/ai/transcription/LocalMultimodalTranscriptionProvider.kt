@@ -37,6 +37,7 @@ class LocalMultimodalTranscriptionProvider(
         return try {
             val raw = localModelsProvider.streamChat(
                 context = context,
+                onStatus = { status -> Log.i(TAG, "Local model status=$status") },
                 messages = listOf(
                     mapOf(
                         "role" to "User",
@@ -51,7 +52,9 @@ class LocalMultimodalTranscriptionProvider(
                 Log.w(TAG, "Local transcription returned fallback response")
                 ""
             } else {
-                raw.sanitizeTranscript()
+                raw.sanitizeTranscript().also { transcript ->
+                    Log.i(TAG, "Local transcription rawLength=${raw.length} transcriptLength=${transcript.length}")
+                }
             }
         } catch (t: Throwable) {
             Log.e(TAG, "Local LiteRT transcription failed", t)
@@ -73,16 +76,14 @@ class LocalMultimodalTranscriptionProvider(
     }
 
     private fun buildTranscriptionPrompt(language: String?): String {
-        val langLine = language?.takeIf { it.isNotBlank() }?.let {
-            "Primary language hint: $it."
-        } ?: ""
+        val spokenLanguage = language?.takeIf { it.isNotBlank() }
+            ?.let { Locale.forLanguageTag(it).getDisplayLanguage(Locale.ENGLISH) }
+            ?.takeIf { it.isNotBlank() }
+            ?: "the original language"
         return buildString {
-            appendLine("Transcribe the attached audio accurately.")
-            appendLine("Return only plain transcript text.")
-            appendLine("Do not summarize, do not add commentary, do not add markdown.")
-            appendLine("If there is no intelligible speech, return exactly: [NO_SPEECH]")
-            appendLine("Keep line breaks natural for paragraph pauses.")
-            if (langLine.isNotBlank()) appendLine(langLine)
+            appendLine("Transcribe the following speech segment in $spokenLanguage into $spokenLanguage text.")
+            appendLine("Only output the transcription, with no newlines or commentary.")
+            appendLine("When transcribing numbers, write digits.")
         }.trim()
     }
 

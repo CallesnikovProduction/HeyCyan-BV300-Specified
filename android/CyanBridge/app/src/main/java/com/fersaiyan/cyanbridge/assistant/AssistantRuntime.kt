@@ -19,6 +19,7 @@ object AssistantRuntime {
 object AssistantPreferences {
     private const val FILE = "bv300_assistant"
     private const val MANUAL_MODE = "manual_chatgpt_mode"
+    private const val AUTO_SEND_MODE = "automatic_chatgpt_ui_mode"
     private const val CONVERSATION = "desired_conversation"
 
     fun manualMode(context: Context): Boolean =
@@ -26,6 +27,14 @@ object AssistantPreferences {
 
     fun setManualMode(context: Context, enabled: Boolean) {
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putBoolean(MANUAL_MODE, enabled).apply()
+    }
+
+    fun autoSendMode(context: Context): Boolean =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getBoolean(AUTO_SEND_MODE, false)
+
+    fun setAutoSendMode(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit()
+            .putBoolean(AUTO_SEND_MODE, enabled).putBoolean(MANUAL_MODE, enabled).apply()
     }
 
     fun conversationName(context: Context): String =
