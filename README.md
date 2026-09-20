@@ -15,7 +15,6 @@ research needed to support more devices without hiding their limitations.
 | Build or use the Android companion | [`android/CyanBridge/README.md`](android/CyanBridge/README.md) |
 | Connect and sync media from HeyCyan glasses | [`android/AGENTS.md`](android/AGENTS.md) |
 | Work on shared Android modules | [`heycyan-core/README.md`](heycyan-core/README.md) |
-| Build the iOS shell or inspect the vendor demo | [`ios/README.md`](ios/README.md) |
 | Investigate MemoMind/XGIMI protocol support | [`BRIDGE_RESEARCH_NOTES.md`](BRIDGE_RESEARCH_NOTES.md) |
 
 ## What CyanBridge does today
@@ -51,7 +50,6 @@ considered reliable.
 | MemoMind/XGIMI | Experimental research | RFCOMM framing, device info, battery, cards, notifications, and selected settings are mapped. The adapter still needs sustained physical-device validation. |
 | Meta Ray-Ban | Partial setup only | Optional registration plumbing exists when the Meta DAT SDK is available. Sessions, camera streaming, photo capture, and display rendering are explicitly not implemented. |
 | Even/Mentra runtimes | Prototype | Adapter and runtime experiments are present, not a supported consumer device path. |
-| iOS | CI-validated host | A simulator-targeted KMP host is built and tested via a GitHub Actions macOS workflow (framework link, Xcode compilation, simulator launch, screenshot); the vendor QCSDK path still requires a physical device and needs hardware validation. |
 
 ## Build the Android app
 
@@ -99,8 +97,6 @@ phone's Wi-Fi Direct group-owner address for the glasses address.
 | `android/glasses_sdk_20250723_v01.aar` | Vendor Android SDK artifact used by the HeyCyan path. |
 | `android/HeyCyanOfficialApp/` | Decompiled vendor app used as protocol reference. |
 | `heycyan-core/` | Shared Android modules for BLE, connectivity, data, audio, and API boundaries. |
-| `ios/CyanBridgeKMPHost/` | Simulator-capable SwiftUI host for the shared KMP framework. |
-| `ios/QCSDKDemo/` | Vendor iOS demo and device-only protocol reference. |
 | `BRIDGE_RESEARCH_NOTES.md` | Detailed MemoMind/XGIMI transport and protocol findings. |
 | `WIFI_TRANSFER_ARCHITECTURE.md` | Historical technical background for the HeyCyan transfer design. |
 
@@ -136,7 +132,7 @@ give back.
 
 ## Vendor material and licensing
 
-The bundled `.aar`, `QCSDK.framework`, decompiled vendor apps, firmware files,
+The bundled `.aar`, decompiled vendor apps, firmware files,
 and protocol notes are not a promise that their underlying vendor components are
 open source or redistributable. Review the relevant vendor terms and applicable
 law before distributing, modifying, or using them outside personal research and

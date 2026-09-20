@@ -5,10 +5,8 @@ Software Development Kit (SDK) for HeyCyan Smart Glasses. Contains core librarie
 
 ## Project Structure
 - `android/`: Android-specific SDK code and demo apps.
-- `ios/`: iOS-specific SDK code and sample projects.
 - `examples/`: Cross-platform or specific usage examples.
 - `firmware_dump/`: Hardware firmware reference or dumps.
-- `QCSDK.framework/`: Pre-compiled framework for iOS development.
 
 ## Android Data Transfer Notes
 

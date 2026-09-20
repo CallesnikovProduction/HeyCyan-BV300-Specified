@@ -6,7 +6,6 @@ import android.util.Patterns
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import java.util.Locale
-import java.util.UUID
 
 object ProSubscriptionServerPrefs {
     private const val PREFS_NAME = "pro_subscription_server_prefs"
@@ -17,16 +16,7 @@ object ProSubscriptionServerPrefs {
     private const val KEY_API_TOKEN = "api_token"
     private const val KEY_ACCOUNT_EMAIL = "account_email"
     private const val KEY_VERIFIED_ACCOUNT_EMAIL = "verified_account_email"
-    private const val KEY_WEB_CALLBACK_RESULT = "web_callback_result"
-    private const val KEY_WEB_CALLBACK_PURPOSE = "web_callback_purpose"
-    private const val KEY_WEB_CALLBACK_EXPIRES_AT_MS = "web_callback_expires_at_ms"
     private const val KEY_LEGACY_CREDENTIALS_CLEARED = "legacy_credentials_cleared"
-    private const val WEB_CALLBACK_RESULT_TTL_MS = 15L * 60L * 1000L
-
-    enum class WebCallbackPurpose {
-        SUBSCRIPTION,
-        DONATION,
-    }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -76,51 +66,6 @@ object ProSubscriptionServerPrefs {
         }.commit()
         check(saved) { "Unable to securely store the server account token" }
         prefs(context).edit().remove(KEY_API_TOKEN).commit()
-    }
-
-    fun createWebCallbackResult(
-        context: Context,
-        purpose: WebCallbackPurpose,
-        nowMs: Long = System.currentTimeMillis(),
-    ): String {
-        clearLegacyPlaintextCredentials(context)
-        val result = UUID.randomUUID().toString()
-        val saved = secretPrefs(context).edit()
-            .putString(KEY_WEB_CALLBACK_RESULT, result)
-            .putString(KEY_WEB_CALLBACK_PURPOSE, purpose.name)
-            .putLong(KEY_WEB_CALLBACK_EXPIRES_AT_MS, nowMs + WEB_CALLBACK_RESULT_TTL_MS)
-            .commit()
-        check(saved) { "Unable to securely prepare the checkout callback" }
-        return result
-    }
-
-    fun consumeWebCallbackResult(
-        context: Context,
-        result: String?,
-        nowMs: Long = System.currentTimeMillis(),
-    ): WebCallbackPurpose? {
-        clearLegacyPlaintextCredentials(context)
-        val encryptedPrefs = secretPrefs(context)
-        val expectedResult = encryptedPrefs.getString(KEY_WEB_CALLBACK_RESULT, "").orEmpty()
-        val expiresAtMs = encryptedPrefs.getLong(KEY_WEB_CALLBACK_EXPIRES_AT_MS, 0L)
-        if (expectedResult.isBlank() || expiresAtMs <= nowMs) {
-            encryptedPrefs.edit()
-                .remove(KEY_WEB_CALLBACK_RESULT)
-                .remove(KEY_WEB_CALLBACK_PURPOSE)
-                .remove(KEY_WEB_CALLBACK_EXPIRES_AT_MS)
-                .apply()
-            return null
-        }
-        if (result.isNullOrBlank() || result != expectedResult) return null
-
-        val purpose = encryptedPrefs.getString(KEY_WEB_CALLBACK_PURPOSE, "")
-            ?.let { value -> WebCallbackPurpose.entries.firstOrNull { it.name == value } }
-        encryptedPrefs.edit()
-            .remove(KEY_WEB_CALLBACK_RESULT)
-            .remove(KEY_WEB_CALLBACK_PURPOSE)
-            .remove(KEY_WEB_CALLBACK_EXPIRES_AT_MS)
-            .apply()
-        return purpose
     }
 
     fun getAccountEmail(context: Context): String =

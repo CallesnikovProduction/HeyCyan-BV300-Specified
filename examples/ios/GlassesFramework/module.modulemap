@@ -1,6 +1,0 @@
-framework module GlassesFramework {
-    umbrella header "GlassesFramework.h"
-    
-    export *
-    module * { export * }
-}

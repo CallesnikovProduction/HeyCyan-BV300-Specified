@@ -20,9 +20,6 @@ The repository also needs an Actions secret named `META_GITHUB_TOKEN` with
 `read:packages` access to the Meta Wearables package. The secret is passed only
 to Gradle test/build steps and is never stored in the repository or runner unit.
 
-The iOS workflow remains on hosted macOS because this Linux runner cannot build
-or launch the iOS simulator.
-
 ## Start or Stop the Runner
 
 The user systemd session needs these environment variables when commands are run

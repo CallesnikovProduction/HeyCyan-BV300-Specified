@@ -6,8 +6,6 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-val enableAppleTargets = providers.gradleProperty("enableAppleTargets").orNull == "true"
-
 kotlin {
     androidTarget {
         compilerOptions {
@@ -15,36 +13,11 @@ kotlin {
         }
     }
 
-    // A second host target keeps common code genuinely multiplatform-testable while
-    // Apple framework linking and vendor integration remain behind the iOS gate.
+    // A second host target keeps common code multiplatform-testable.
     jvm("portability") {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
-    }
-
-    // Apple targets are opt-in so the Android/Linux build remains usable while
-    // the framework is compiled and linked from Xcode on macOS.
-    if (enableAppleTargets) {
-        iosX64 {
-            binaries.framework {
-                baseName = "CyanBridgeShared"
-                isStatic = false
-            }
-        }
-        iosArm64 {
-            binaries.framework {
-                baseName = "CyanBridgeShared"
-                isStatic = true
-            }
-        }
-        iosSimulatorArm64 {
-            binaries.framework {
-                baseName = "CyanBridgeShared"
-                isStatic = false
-            }
-        }
-
     }
 
     sourceSets {

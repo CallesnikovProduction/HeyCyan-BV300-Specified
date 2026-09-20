@@ -178,35 +178,23 @@ adb logcat -s DataDownload DeviceNotify WifiP2pManagerSingleton WifiP2pBroadcast
 
 ## Compose Multiplatform (CMP)
 
-The `:shared` module uses JetBrains Compose Multiplatform so both Android and iOS render from the same `@Composable` screens in `commonMain`.
+The `:shared` module uses JetBrains Compose Multiplatform for Android and the JVM portability target.
 
 ### Key Facts
 
 - **CMP Version**: 1.8.2 (Kotlin 2.3.10).
 - **Material 3**: Uses `org.jetbrains.compose.material3` as Maven coordinate but `import androidx.compose.*` in Kotlin sources (same API surface as Jetpack Compose). All migrated screen files keep `import androidx.compose.*` — do NOT use `import org.jetbrains.compose.*`.
-- **iOS Framework**: Simulator targets use dynamic framework (`isStatic = false`) for Skiko; device uses static (`isStatic = true`).
-- **Skiko**: CMP's rendering layer (Skia). Ships as `.dylib` for simulators, `.a` for device. The JetBrains Compose Maven repository hosts Skiko native binaries.
 - **Test dependency**: `compose.uiTest` requires `@OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)` on the `commonTest.dependencies` block. CMP UI tests (`runComposeUiTest`) need a rendering backend — they cannot run on the JVM "portability" target. Write pure state/logic tests for `commonTest` and use Android instrumentation tests for full Compose UI testing.
 
 ### Build Commands
 
 ```bash
-# Build shared framework for iOS simulator (dynamic)
-JAVA_HOME=/opt/android-studio/jbr ./gradlew -PenableAppleTargets=true :shared:linkDebugFrameworkIosSimulatorArm64
-
-# Build shared framework for iOS device (static)
-JAVA_HOME=/opt/android-studio/jbr ./gradlew -PenableAppleTargets=true :shared:linkDebugFrameworkIosArm64
-
 # Run shared portability tests
 JAVA_HOME=/opt/android-studio/jbr ./gradlew :shared:portabilityTest
 
 # Build Android app (uses shared CMP composables)
 JAVA_HOME=/opt/android-studio/jbr ./gradlew :app:assembleDebug
 ```
-
-### iOS Host Architecture
-
-The iOS host (`CyanBridgeKMPHost`) embeds a `ComposeUIViewController` via `UIViewControllerRepresentable`. The `MainViewController()` function is exported from the Kotlin/Native framework. Both platforms call the same shared composables from `shared/commonMain`.
 
 ### Kotlin Upgrade (Completed)
 

@@ -1,6 +1,0 @@
-language = C
-compilerOpts = -framework Security -framework Foundation
-linkerOpts = -framework Security -framework Foundation
----
-#include <CommonCrypto/CommonCrypto.h>
-#include <Security/Security.h>
