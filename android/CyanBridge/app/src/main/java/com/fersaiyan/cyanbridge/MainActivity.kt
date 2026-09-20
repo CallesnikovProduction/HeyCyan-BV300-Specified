@@ -1988,19 +1988,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             GlassesDashboardAction.StopWifiAdbDebug -> {
                 if (BuildConfig.DEBUG && isHeyCyanSelected()) wifiAdbDebugController.stop()
             }
-            GlassesDashboardAction.MetaRegister,
-            GlassesDashboardAction.MetaOpenPairing,
-            GlassesDashboardAction.MetaOpenMetaAi,
-            GlassesDashboardAction.MetaUnregister,
-            GlassesDashboardAction.MetaStartSession,
-            GlassesDashboardAction.MetaStopSession,
-            GlassesDashboardAction.MetaStartStream,
-            GlassesDashboardAction.MetaStopStream,
-            GlassesDashboardAction.MetaCapturePhoto,
-            GlassesDashboardAction.MetaViewPhoto,
-            GlassesDashboardAction.MetaStartDisplay,
-            GlassesDashboardAction.MetaStopDisplay,
-            GlassesDashboardAction.MetaSendDiagnostics -> Unit
             GlassesDashboardAction.MeizuConnect -> {
                 DeviceProfileStore.loadLastSelected(this)?.macAddress?.let {
                     getOrCreateMeizuMyvuManager().connect(it, this, userInitiated = true)
@@ -6744,8 +6731,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         binding.layoutHeycyanExtras.visibility =
             if (model.isVisible(GlassesManagerGating.Action.HEY_CYAN_EXTRAS)) android.view.View.VISIBLE else android.view.View.GONE
 
-        binding.layoutMetaRayban.visibility = View.GONE
-
         // Status placeholders
         val showBattery = model.isVisible(GlassesManagerGating.Action.STATUS_BATTERY)
         val showStorage = model.isVisible(GlassesManagerGating.Action.STATUS_STORAGE)
@@ -6776,7 +6761,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     model.isVisible(GlassesManagerGating.Action.ADVANCED_OTA)
                 },
                 aiWakeWordRoute = AiWakeWordPreferences.route(this),
-                showMetaRaybanControls = false,
                 showMeizuMyvuControls = model.isVisible(GlassesManagerGating.Action.MEIZU_MYVU_CONTROLS),
                 showBattery = showBattery,
                 showStorage = showStorage,

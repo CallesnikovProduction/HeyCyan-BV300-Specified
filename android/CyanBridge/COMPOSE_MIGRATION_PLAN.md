@@ -105,7 +105,7 @@ This is not a small update. Current main added or substantially changed:
 - Auto-capture, audio ingestion, image-query, and local-model behavior.
 - Asaas subscription, cancellation, quota, email, donation, and checkout behavior.
 - Studio Bridge voice approval support and encrypted remote-model credentials.
-- MemoMind, EvenHub, Mentra, terminal HUD, and Meta Ray-Ban bridge groundwork.
+- MemoMind, EvenHub, Mentra, and terminal HUD groundwork.
 - New settings, onboarding, plugin, debugging, and media behaviors.
 
 Any migration that starts from the old Compose branch would have to reconstruct these changes and is likely to regress production behavior.

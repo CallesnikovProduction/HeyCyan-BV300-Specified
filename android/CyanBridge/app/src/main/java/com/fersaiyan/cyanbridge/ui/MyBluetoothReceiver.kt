@@ -8,7 +8,6 @@ import com.oudmon.ble.base.bluetooth.DeviceManager
 import com.oudmon.ble.base.bluetooth.QCBluetoothCallbackCloneReceiver
 import com.oudmon.ble.base.communication.Constants
 import com.oudmon.ble.base.communication.LargeDataHandler
-import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsSignal
 import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
 import org.greenrobot.eventbus.EventBus
@@ -23,7 +22,6 @@ import org.greenrobot.eventbus.EventBus
 class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
     override fun connectStatue(device: BluetoothDevice?, connected: Boolean) {
         Log.e("connectStatue","---connectStatue")
-        if (DeviceProfileStore.isMetaSelected(MyApplication.getInstance())) return
         if(device !=null && connected){
             DiagnosticsStore.connection(DiagnosticsSignal.ConnectRequested, "Bluetooth link connected", "Waiting for GATT services")
             val deviceName = try {
@@ -41,7 +39,6 @@ class MyBluetoothReceiver : QCBluetoothCallbackCloneReceiver() {
     }
 
     override fun onServiceDiscovered() {
-        if (DeviceProfileStore.isMetaSelected(MyApplication.getInstance())) return
         //do init
         LargeDataHandler.getInstance().initEnable()
         DiagnosticsStore.connection(DiagnosticsSignal.Connected, "GATT services ready", "Vendor command channel initialized")

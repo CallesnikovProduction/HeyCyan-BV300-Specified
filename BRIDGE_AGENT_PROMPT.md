@@ -1282,7 +1282,7 @@ The first milestone is done. All items below are implemented and the app builds 
 - `GlassesViewModel` initializes `GlassesBridge` with `MockDisplayAdapter` when MEMO_MIND is the selected device class
 - `GlassesScreen` shows a "Bridge Lab" section (with test buttons + OLED preview) only when MEMO_MIND is active
 - Test buttons: "Show Hello", "Show Lines", "Show Card", "Clear"
-- The Bridge Lab section is hidden for HeyCyan, Meta Rayban, and Generic Audio devices
+- The Bridge Lab section is hidden for HeyCyan and Generic Audio devices
 
 ### Files modified/created
 

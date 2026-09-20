@@ -8,34 +8,6 @@ import org.junit.Test
 
 class GeminiLiveVisionPolicyTest {
     @Test
-    fun `meta rayban uses live frames capped at one fps`() {
-        val capabilities = GeminiLiveVisionPolicy.forDevice(DeviceClass.META_RAYBAN)
-
-        assertEquals(GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES, capabilities.mode)
-        assertEquals(1.0, capabilities.maxVideoFps, 0.0)
-        assertTrue(
-            GeminiLiveVisionPolicy.shouldSendVideoFrame(
-                capabilities = capabilities,
-                userSpeaking = true,
-                nowMs = 2_000L,
-                lastFrameSentMs = 1_000L,
-                encodingInProgress = false,
-                refreshIntervalMs = 1_000L,
-            ),
-        )
-        assertFalse(
-            GeminiLiveVisionPolicy.shouldSendVideoFrame(
-                capabilities = capabilities,
-                userSpeaking = false,
-                nowMs = 3_000L,
-                lastFrameSentMs = 1_000L,
-                encodingInProgress = false,
-                refreshIntervalMs = 1_000L,
-            ),
-        )
-    }
-
-    @Test
     fun `hey cyan still capture is opportunistic and rate limited`() {
         val capabilities = GeminiLiveVisionPolicy.forDevice(DeviceClass.HEY_CYAN)
 
@@ -83,7 +55,11 @@ class GeminiLiveVisionPolicyTest {
         )
         assertFalse(
             GeminiLiveVisionPolicy.shouldSendVideoFrame(
-                capabilities = GeminiLiveVisionPolicy.forDevice(DeviceClass.META_RAYBAN),
+                capabilities = GeminiLiveVisionCapabilities(
+                    mode = GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES,
+                    audibleStillCapture = false,
+                    maxVideoFps = 1.0,
+                ),
                 userSpeaking = true,
                 nowMs = 20_000L,
                 lastFrameSentMs = 1_000L,

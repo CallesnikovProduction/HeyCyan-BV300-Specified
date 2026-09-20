@@ -55,17 +55,10 @@ jobs:
           /opt/android-studio/jbr/bin/java -version
           "$HOME/Android/Sdk/platform-tools/adb" version
 
-      - name: Verify Meta SDK credential
-        env:
-          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
-        run: test -n "$META_GITHUB_TOKEN"
-
       - name: Validate Tasker integration contracts
         run: python3 tools/hil/validate_tasker_profiles.py
 
       - name: Run Android and shared tests
-        env:
-          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         working-directory: android/CyanBridge
         run: >-
           ./gradlew --no-daemon --stacktrace
@@ -73,8 +66,6 @@ jobs:
           :shared:portabilityTest
 
       - name: Assemble debug and instrumentation APKs
-        env:
-          META_GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         working-directory: android/CyanBridge
         run: >-
           ./gradlew --no-daemon --stacktrace
@@ -96,13 +87,6 @@ jobs:
 
       - name: Install branch build on local emulator
         run: bash tools/hil/install.sh '${{ steps.emulator.outputs.serial }}'
-
-      - name: Run Mock DAT and Meta pairing instrumentation
-        run: >-
-          bash tools/hil/run_instrumentation.sh
-          '${{ steps.emulator.outputs.serial }}'
-          emulator
-          com.fersaiyan.cyanbridge.ui.MetaPairingMockFlowTest,com.fersaiyan.cyanbridge.ui.MetaPairingScreenTest
 
       - name: Run hermetic audio instrumentation
         run: >-

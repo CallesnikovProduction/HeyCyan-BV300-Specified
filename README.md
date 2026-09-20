@@ -48,7 +48,6 @@ considered reliable.
 | CyanBridge local and remote chat | Included | The app contains local runtime support and an OpenAI-compatible remote-server option. Model availability depends on the phone and configuration. |
 | CyanBridge Model Studio bridge | Experimental | Relays Studio events and approval requests over an authenticated WebSocket. It is not a substitute for reviewing desktop work. |
 | MemoMind/XGIMI | Experimental research | RFCOMM framing, device info, battery, cards, notifications, and selected settings are mapped. The adapter still needs sustained physical-device validation. |
-| Meta Ray-Ban | Partial setup only | Optional registration plumbing exists when the Meta DAT SDK is available. Sessions, camera streaming, photo capture, and display rendering are explicitly not implemented. |
 | Even/Mentra runtimes | Prototype | Adapter and runtime experiments are present, not a supported consumer device path. |
 
 ## Build the Android app
@@ -110,7 +109,6 @@ repositories or profiles:
 | Project | How it contributed |
 | --- | --- |
 | [Meizu MYVU Client](https://github.com/Panny777/Meizu-Myvu-Client) by [Panny777](https://github.com/Panny777) | Hardware-verified MYVU / Star Air protocol client. Its BLE, ECDH, RFCOMM relay, heartbeat, and display transport are used by the native MYVU integration. |
-| [OpenVision](https://github.com/rayl15/OpenVision) by [rayl15](https://github.com/rayl15) | Important reference for the Meta Ray-Ban integration direction, wearable connection architecture, and glasses-based AI workflows. |
 | [private-agent](https://github.com/orailnoor/private-agent) by [orailnoor](https://github.com/orailnoor) | Inspiration for CyanBridge's local-agent architecture, especially the Accessibility-based observe, decide, execute, and observe loop. |
 
 These projects remain independent works with their own licenses and

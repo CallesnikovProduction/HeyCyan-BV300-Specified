@@ -65,17 +65,10 @@ jobs:
             printf '%s\n' "$HOME/Android/Sdk/platform-tools" >> "$GITHUB_PATH"
           } >> "$GITHUB_ENV"
 
-      - name: Verify Meta SDK credential
-        env:
-          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
-        run: test -n "$GITHUB_TOKEN"
-
       - name: Validate Tasker and Play-sensitive contracts
         run: python3 tools/hil/validate_tasker_profiles.py
 
       - name: Build debug app and instrumentation APKs
-        env:
-          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         working-directory: android/CyanBridge
         run: >-
           ./gradlew --no-daemon --stacktrace
@@ -167,8 +160,6 @@ jobs:
 
       - name: Rebuild universal APKs for physical Tasker target
         if: steps.tasker.outputs.kind == 'physical'
-        env:
-          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         working-directory: android/CyanBridge
         run: >-
           ./gradlew --no-daemon --stacktrace
@@ -243,7 +234,6 @@ jobs:
         shell: bash
         env:
           CYANBRIDGE_HIL_EMULATOR_AVD: ${{ vars.CYANBRIDGE_HIL_EMULATOR_AVD || '' }}
-          GITHUB_TOKEN: ${{ secrets.META_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           adb="$ANDROID_HOME/platform-tools/adb"

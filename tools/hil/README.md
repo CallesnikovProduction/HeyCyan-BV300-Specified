@@ -148,9 +148,6 @@ All variables are optional. Defaults avoid destructive or hardware-dependent che
   - Default: `false`.
   - When true, failure artifacts may include screenshots/UI XML and can expose account/UI content.
 
-The workflow also expects the existing `META_GITHUB_TOKEN` secret. It is exported to Gradle as
-`GITHUB_TOKEN`, which is the name currently consumed by the Meta DAT repository/build logic.
-
 ## Branch-exact Tasker profile synchronization
 
 `sync_tasker_profiles.sh` imports these exact files from the checked-out commit:

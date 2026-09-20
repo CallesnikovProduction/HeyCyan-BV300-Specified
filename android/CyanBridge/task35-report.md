@@ -9,7 +9,7 @@ Implement **Chapter 4** baseline for the **Glasses Manager** screen:
 - Show **battery/storage placeholders** **only when supported** (otherwise hidden)
 - Capability gate the action/button panel:
   - **HEY_CYAN**: show an expanded controls panel (some buttons may be disabled / “coming soon”)
-  - **META_RAYBAN / GENERIC_AUDIO / UNKNOWN**: show **Meeting Capture only** (plus the basic connection/pairing UI)
+  - **GENERIC_AUDIO / UNKNOWN**: show **Meeting Capture only** (plus the basic connection/pairing UI)
 - Add tests:
   - Unit tests for gating logic
   - UI test verifying visibility changes across device classes
@@ -59,7 +59,7 @@ Battery polling is now only active when the UI policy indicates the current prof
 
 ### Unit tests (required)
 - **New test:** `app/src/test/java/com/fersaiyan/cyanbridge/devices/GlassesManagerGatingTest.kt`
-  - Verifies visible actions for HEY_CYAN vs META_RAYBAN / GENERIC_AUDIO / null profile.
+  - Verifies visible actions for HEY_CYAN vs GENERIC_AUDIO / null profile.
 
 ### UI test (androidTest)
 - **New androidTest:** `app/src/androidTest/java/com/fersaiyan/cyanbridge/GlassesManagerUiGatingTest.kt`

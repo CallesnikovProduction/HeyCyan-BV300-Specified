@@ -3,7 +3,7 @@
 ### Summary
 Implemented Chapter 3 requirements for Bluetooth scanning + pairing UI in `android/CyanBridge`:
 - Scan + display nearby BLE devices
-- Guess device class (HEY_CYAN / META_RAYBAN / GENERIC_AUDIO / UNKNOWN)
+- Guess device class (HEY_CYAN / GENERIC_AUDIO / UNKNOWN)
 - Per-device manual override (2 alternate classes + “Other”)
 - Persist last-selected device profile (MAC + detected/selected class + override flag)
 - Show last selected device class in Glasses Manager status card
@@ -19,7 +19,6 @@ Implemented Chapter 3 requirements for Bluetooth scanning + pairing UI in `andro
 **Classification**
 - Added `DeviceClassifier.guessDeviceClass(name, uuids)` with name heuristics:
   - HEY_CYAN: contains `HeyCyan`/`Cyan` or starts with `O_` / `Q_`
-  - META_RAYBAN: contains `Ray-Ban` / `Rayban` / `Meta Ray`
   - GENERIC_AUDIO: simple headphone/earbud keywords
   - UNKNOWN fallback
 - Service UUID list is captured and plumbed through, ready for future UUID-based heuristics.

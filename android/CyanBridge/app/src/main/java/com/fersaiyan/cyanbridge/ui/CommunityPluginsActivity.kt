@@ -169,13 +169,11 @@ class CommunityPluginsActivity : AppCompatActivity() {
         val selectedClass = DeviceProfileStore.selectedClass(this)
         val hasCamera = selectedClass in setOf(
             DeviceClass.HEY_CYAN,
-            DeviceClass.META_RAYBAN,
             DeviceClass.UNKNOWN,
         )
         val hasOnboardStorage = selectedClass == DeviceClass.HEY_CYAN || selectedClass == DeviceClass.UNKNOWN
 
         val autoAudioDescription = when (selectedClass) {
-            DeviceClass.META_RAYBAN -> "Unavailable for Meta Ray-Ban: DAT does not expose HeyCyan onboard audio-file recording."
             DeviceClass.MEIZU_MYVU -> "Unavailable for Meizu MYVU: device has no onboard audio file storage."
             DeviceClass.GENERIC_AUDIO -> "Unavailable for Earbuds / Audio-only glasses: device has no onboard audio file storage."
             else -> "Record glasses audio in resilient 15-minute loops with optional speech extension and sync."

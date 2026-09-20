@@ -39,7 +39,7 @@ class BluetoothReceiver : BroadcastReceiver() {
                 if (connectState == BluetoothAdapter.STATE_OFF) {
                     DiagnosticsStore.connection(DiagnosticsSignal.Disconnected, "Bluetooth adapter off")
                     Log.i("qc" ,"Bluetooth is off --> ")
-                    if (canConnect && !DeviceProfileStore.isMetaSelected(context)) {
+                    if (canConnect) {
                         BleOperateManager.getInstance().setBluetoothTurnOff(false)
                         BleOperateManager.getInstance().disconnect()
                     }
@@ -47,7 +47,7 @@ class BluetoothReceiver : BroadcastReceiver() {
                 } else if (connectState == BluetoothAdapter.STATE_ON) {
                     DiagnosticsStore.semantic("Bluetooth adapter ready", category = com.fersaiyan.cyanbridge.diagnostics.DiagnosticsCategory.CONNECTION)
                     Log.i("qc" ,"Bluetooth is on --> ")
-                    if (canConnect && !DeviceProfileStore.isMetaSelected(context)) {
+                    if (canConnect) {
                         BleOperateManager.getInstance().setBluetoothTurnOff(true)
                     }
 
@@ -71,11 +71,7 @@ class BluetoothReceiver : BroadcastReceiver() {
                 // opportunistically (re)connect the BLE control channel too.
                 val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
                 if (device != null) {
-                    val saved = if (DeviceProfileStore.isMetaSelected(context)) {
-                        null
-                    } else {
-                        DeviceManager.getInstance().deviceAddress
-                    }
+                    val saved = DeviceManager.getInstance().deviceAddress
                     val name = try { device.name } catch (_: SecurityException) { null }
                     val looksLikeGlasses = name?.contains("HeyCyan", ignoreCase = true) == true ||
                         name?.contains("Cyan", ignoreCase = true) == true ||
@@ -126,11 +122,7 @@ class BluetoothReceiver : BroadcastReceiver() {
                     intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
                 if (device != null) {
                     // Only attempt pairing for the known glasses device.
-                    val saved = if (DeviceProfileStore.isMetaSelected(context)) {
-                        null
-                    } else {
-                        DeviceManager.getInstance().deviceAddress
-                    }
+                    val saved = DeviceManager.getInstance().deviceAddress
                     if (!saved.isNullOrBlank() && saved.equals(device.address, ignoreCase = true)) {
                         if (device.bondState != BluetoothDevice.BOND_BONDED) {
                             BleOperateManager.getInstance().createBondBluetoothJieLi(device)

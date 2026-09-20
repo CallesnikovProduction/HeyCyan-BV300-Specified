@@ -7,8 +7,6 @@ object GlassesManagerGating {
         STATUS_BATTERY,
         STATUS_STORAGE,
         HEY_CYAN_EXTRAS,
-        META_RAYBAN_CONTROLS,
-        META_RAYBAN_REGISTRATION,
         MEIZU_MYVU_CONTROLS,
         EYEVUE_CONTROLS,
         TUNEBUDS_CONTROLS,
@@ -48,10 +46,6 @@ object GlassesManagerGating {
                 base.add(Action.CAPTURE_SETTINGS)
                 base.add(Action.AI_WAKE_WORD_ROUTING)
                 base.add(Action.WIFI_ADB_DEBUG)
-            }
-            DeviceClass.META_RAYBAN -> {
-                base.add(Action.META_RAYBAN_CONTROLS)
-                base.add(Action.META_RAYBAN_REGISTRATION)
             }
             DeviceClass.MEIZU_MYVU -> {
                 base.add(Action.MEIZU_MYVU_CONTROLS)

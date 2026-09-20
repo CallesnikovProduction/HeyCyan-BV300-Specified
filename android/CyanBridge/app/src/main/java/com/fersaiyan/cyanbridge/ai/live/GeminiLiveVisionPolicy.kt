@@ -25,14 +25,6 @@ data class GeminiLiveVisionCapabilities(
 
 object GeminiLiveVisionPolicy {
     fun forDevice(deviceClass: DeviceClass): GeminiLiveVisionCapabilities = when (deviceClass) {
-        // CyanBridge already has a Meta DAT camera stream. Gemini receives a sampled view,
-        // never the full 24 fps source.
-        DeviceClass.META_RAYBAN -> GeminiLiveVisionCapabilities(
-            mode = GeminiLiveVisionCapabilities.Mode.LIVE_FRAMES,
-            audibleStillCapture = false,
-            maxVideoFps = 1.0,
-        )
-
         // HeyCyan currently exposes individual thumbnail captures. Programmatic capture makes
         // an audible shutter sound, so refresh only on a new speech window after the configured
         // cadence. The physical AI-photo button remains manual.

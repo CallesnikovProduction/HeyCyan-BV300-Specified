@@ -159,7 +159,7 @@ object AutoPairManager {
             MoyoungW620Manager.getInstance(context).connect(mac)
             return
         }
-        if (DeviceProfileStore.isMetaSelected(context) || DeviceProfileStore.isMeizuMyvuSelected(context)) {
+        if (DeviceProfileStore.isMeizuMyvuSelected(context)) {
             Log.d(TAG, "Skipping vendor reconnect for selected non-HeyCyan glasses ($reason)")
             return
         }
@@ -218,12 +218,6 @@ object AutoPairManager {
             profile.macAddress.takeIf { it.isNotBlank() }?.let {
                 MoyoungW620Manager.getInstance(context).connect(it, profile.advertisedName)
             }
-            return null
-        }
-        if (profile?.selectedClass == DeviceClass.META_RAYBAN) {
-            // Meta owns its transport through DAT. Never hand its Bluetooth identity to
-            // the Oudmon connector, even when the device is also visible to Android BLE.
-            Log.d(TAG, "Skipping vendor reconnect for selected Meta Ray-Ban")
             return null
         }
         val profileMac = profile
