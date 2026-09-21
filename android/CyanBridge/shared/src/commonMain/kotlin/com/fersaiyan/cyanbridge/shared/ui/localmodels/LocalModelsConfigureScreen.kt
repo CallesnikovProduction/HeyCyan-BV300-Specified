@@ -125,6 +125,7 @@ fun LocalModelsConfigureScreen(
                     Text(state.engineStatus, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     if (state.deviceSummary.isNotBlank()) SupportingText(state.deviceSummary)
                     SupportingText(state.selectedModelStatus)
+                    SupportingText(state.voskStatus)
                     if (state.installedModels.isNotEmpty()) {
                         ChoiceField(
                             label = "Selected model",
@@ -146,6 +147,12 @@ fun LocalModelsConfigureScreen(
                     ActionRow(
                         primaryLabel = "Import model",
                         onPrimary = { onAction(LocalModelsAction.ImportModel) },
+                        secondaryLabel = "Refresh",
+                        onSecondary = { onAction(LocalModelsAction.Refresh) },
+                    )
+                    ActionRow(
+                        primaryLabel = "Import Vosk Russian ZIP",
+                        onPrimary = { onAction(LocalModelsAction.ImportVosk) },
                         secondaryLabel = "Refresh",
                         onSecondary = { onAction(LocalModelsAction.Refresh) },
                     )

@@ -274,7 +274,8 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                 runCatching {
                     generateFromConversation(conversation, config.prompt, userContents, onToken)
                 }.recoverCatching {
-                    if (userContents == null) throw it
+                    // A visual request must never silently become a text-only answer.
+                    if (userContents == null || config.imagePaths.isNotEmpty()) throw it
                     generateFromConversation(conversation, config.prompt, null, onToken)
                 }.getOrThrow()
             }
@@ -354,9 +355,10 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         val parts = ArrayList<Content>()
         config.imagePaths.forEach { rawPath ->
             val path = rawPath.trim()
-            if (path.isBlank()) return@forEach
+            require(path.isNotBlank()) { "Image path is blank" }
             val file = File(path)
-            if (file.exists()) parts += Content.ImageFile(file.absolutePath)
+            require(file.isFile && file.length() > 0L) { "Image is missing or empty: $path" }
+            parts += Content.ImageFile(file.absolutePath)
         }
         config.audioPath?.trim()?.takeIf { it.isNotBlank() }?.let { path ->
             val file = File(path)

@@ -109,6 +109,10 @@ import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuManager
 import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungAiDialogueAudio
+import com.fersaiyan.cyanbridge.localai.LocalAiOrchestrator
+import com.fersaiyan.cyanbridge.localai.LocalAiPhase
+import com.fersaiyan.cyanbridge.localai.LocalAiRuntime
+import com.fersaiyan.cyanbridge.localai.stt.VoskRussianSpeechRecognizer
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungWifiCredentials
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsLocalHotspot
@@ -347,7 +351,11 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
     }
 
-    private fun speakMoyoungReply(text: String, onDone: (() -> Unit)? = null) {
+    private fun speakMoyoungReply(
+        text: String,
+        languageTag: String = ImageQuestionPreferences.get(this).appLanguageTag,
+        onDone: (() -> Unit)? = null,
+    ) {
         val outputDevice = findMoyoungAudioOutput()
         if (outputDevice == null) {
             AssistantRuntime.update { recordTts("Failure · BV300 output unavailable") }
@@ -365,7 +373,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             return
         }
 
-        val languageTag = ImageQuestionPreferences.get(this).appLanguageTag
         languageTag.takeIf(String::isNotBlank)?.let { tag ->
             engine.setLanguage(Locale.forLanguageTag(tag))
         }
@@ -741,6 +748,18 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var moyoungW620Manager: MoyoungW620Manager? = null
     private var moyoungW620UiJob: Job? = null
     private var moyoungW620AssistantJob: Job? = null
+    private var moyoungW620ListeningJob: Job? = null
+    private var moyoungW620SpeechJob: Job? = null
+    private var localAiTurnJob: Job? = null
+    private val localAiOrchestrator by lazy {
+        LocalAiOrchestrator(
+            context = this,
+            stt = VoskRussianSpeechRecognizer(this),
+            captureFreshPhoto = { startedAtMs ->
+                getOrCreateMoyoungW620Manager().captureFreshAiPhoto(startedAtMs)
+            },
+        )
+    }
     private val tuneBudsAiPhotoInProgress = AtomicBoolean(false)
     private var pendingTransportPermissionAction: (() -> Unit)? = null
 
@@ -1437,6 +1456,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (moyoungW620UiJob == null) {
                 moyoungW620UiJob = lifecycleScope.launch {
                     manager.state.collect { moyoung ->
+                        if (moyoung.protocolState != "CONNECTED" && localAiTurnJob?.isActive == true) {
+                            localAiTurnJob?.cancel(CancellationException("BV300 disconnected"))
+                        }
                         if (!isMoyoungW620Selected()) return@collect
                         DiagnosticsStore.connectionFromManager(moyoung.connectionLabel, "MoYoung")
                         val counts = listOfNotNull(
@@ -1463,6 +1485,26 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     manager.aiDialogueAudio.collect { audio ->
                         if (isMoyoungW620Selected()) {
                             handleMoyoungAiDialogueAudio(audio)
+                        }
+                    }
+                }
+            }
+            if (moyoungW620ListeningJob == null) {
+                moyoungW620ListeningJob = lifecycleScope.launch {
+                    manager.aiDialogueListening.collect { listening ->
+                        if (listening && isMoyoungW620Selected()) {
+                            LocalAiRuntime.update {
+                                it.copy(phase = LocalAiPhase.LISTENING, partialTranscript = "", transcript = "", error = null)
+                            }
+                        }
+                    }
+                }
+            }
+            if (moyoungW620SpeechJob == null) {
+                moyoungW620SpeechJob = lifecycleScope.launch {
+                    manager.aiSpeechDetected.collect { detected ->
+                        if (detected && isMoyoungW620Selected()) {
+                            LocalAiRuntime.update { it.copy(phase = LocalAiPhase.SPEECH_DETECTED) }
                         }
                     }
                 }
@@ -6044,134 +6086,56 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun handleMoyoungAiDialogueAudio(audio: MoyoungAiDialogueAudio) {
-        Log.i(
-            "MoyoungW620",
-            "Processing decoded AI audio bytes=${audio.pcm16.size} " +
-                "cancelledByGlasses=${audio.cancelledByGlasses}",
-        )
-        val manualHandoff = AssistantPreferences.manualMode(this)
-        if (!manualHandoff) when (currentAssistantRoute()) {
-            GlassesAssistantRoute.TASKER_EXTERNAL_UI -> {
-                triggerTaskerVoiceAutomation()
-                return
-            }
-
-            GlassesAssistantRoute.PHONE_ASSISTANT -> {
-                launchPhoneAssistant()
-                return
-            }
-
-            GlassesAssistantRoute.LOCAL,
-            GlassesAssistantRoute.PRO -> Unit
+        val manager = getOrCreateMoyoungW620Manager()
+        if (!manager.isConnected()) {
+            LocalAiRuntime.update { it.copy(phase = LocalAiPhase.ERROR, error = "BV300 disconnected") }
+            return
         }
-
-        if (!manualHandoff && showAssistantSetupIfNeeded(AssistantTestKind.VOICE)) return
-        val queryToken = Any()
-        if (!voiceQueryInProgress.compareAndSet(null, queryToken)) {
-            Log.i("MoyoungW620", "Ignoring AI dialogue while another voice query is active")
+        if (localAiTurnJob?.isActive == true) {
+            Log.i("BV300LocalAI", "Ignoring duplicate assistant audio while a turn is active")
+            return
+        }
+        val token = Any()
+        if (!voiceQueryInProgress.compareAndSet(null, token)) {
+            Log.i("BV300LocalAI", "Ignoring assistant audio while another voice request is active")
             return
         }
 
         prepareAiQuestionForLockScreen()
-        if (manualHandoff) AssistantRuntime.update {
-            startListening(UtteranceSource.BV300)
-            transcribing()
-        }
-        beginAiQuestionForegroundWork("Processing MoYoung glasses voice question")
-        Toast.makeText(this, "Processing glasses voice question…", Toast.LENGTH_SHORT).show()
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            val wavFile = File(cacheDir, "moyoung_ai_${System.currentTimeMillis()}.wav")
+        beginAiQuestionForegroundWork("Processing BV300 local assistant request")
+        localAiTurnJob = lifecycleScope.launch(Dispatchers.IO) {
             try {
                 logMoyoungPcm16Stats(audio.pcm16, audio.sampleRateHz)
-                val preparedPcm16 = Bv300AudioPreprocessor.prepare(
+                val prepared = Bv300AudioPreprocessor.prepare(
                     pcm16 = audio.pcm16,
                     sampleRateHz = audio.sampleRateHz,
-                    compactSilence = !manualHandoff,
+                    compactSilence = false,
                 )
-                Log.i(
-                    "MoyoungW620",
-                    "Prepared AI dialogue PCM inputSamples=${preparedPcm16.inputSamples} " +
-                        "outputSamples=${preparedPcm16.outputSamples} peak=${preparedPcm16.peak} " +
-                        "gain=${"%.2f".format(preparedPcm16.gain)}",
-                )
-                Bv300AudioPreprocessor.writeWav(
-                    file = wavFile,
-                    pcm16 = preparedPcm16.bytes,
-                    sampleRateHz = audio.sampleRateHz,
-                )
-                val transcriptionSelection = if (manualHandoff) null else AutomaticTranscriptionEngine.select(this@MainActivity)
-                val assistantVoiceInput = if (manualHandoff) LocalAssistantVoiceInput(this@MainActivity) else null
-                suspend fun transcribe(): String = if (assistantVoiceInput != null) {
-                    assistantVoiceInput.transcribe(wavFile, recognitionLanguageTag())
-                } else {
-                    requireNotNull(transcriptionSelection).provider.transcribe(wavFile, "audio/wav", recognitionLanguageTag())
-                }
-                var prompt = transcribe().trim()
-                if (prompt.isBlank()) {
-                    Log.w("MoyoungW620", "AI dialogue transcript was empty; retrying once")
-                    prompt = transcribe().trim()
-                }
-                check(prompt.isNotBlank()) { "The glasses audio transcript was empty" }
-                Log.i("MoyoungW620", "AI dialogue transcript produced length=${prompt.length}")
-
-                if (manualHandoff) {
-                    AssistantRuntime.update { prepare(prompt, System.currentTimeMillis(), UtteranceSource.BV300) }
-                    withContext(Dispatchers.Main) {
-                        if (voiceQueryInProgress.compareAndSet(queryToken, null)) {
-                            finishAiQuestionForegroundWork()
-                        }
-                        val sent = AssistantPreferences.autoSendMode(this@MainActivity) &&
-                            ChatGptUiAutomation.send(this@MainActivity, prompt)
-                        if (!sent && !isDeviceLockedForAutomation()) {
-                            Toast.makeText(this@MainActivity, "Message prepared. Review it in BV300 Assistant.", Toast.LENGTH_LONG).show()
-                            startActivity(Intent(this@MainActivity, AssistantSettingsActivity::class.java))
-                        } else if (!sent) {
-                            Log.i("MoyoungW620", "ChatGPT handoff deferred until the phone is unlocked")
-                        }
-                    }
-                    return@launch
-                }
-
-                val reply = runChosenProviderQuery(
-                    userPrompt = prompt,
-                    providerType = requireNotNull(transcriptionSelection).route,
-                    ragProfile = RagProfile.LIGHT,
-                )
+                val reply = localAiOrchestrator.process(prepared.bytes, audio.sampleRateHz)
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@MainActivity, "Asking: $prompt", Toast.LENGTH_SHORT).show()
-                    speakMoyoungReply(reply) {
-                        if (voiceQueryInProgress.compareAndSet(queryToken, null)) {
-                            finishAiQuestionForegroundWork()
+                    speakMoyoungReply(reply, languageTag = "ru-RU") {
+                        if (AssistantRuntime.snapshot.value.lastTts.startsWith("Failure")) {
+                            LocalAiRuntime.update { it.copy(phase = LocalAiPhase.ERROR, error = "BV300 TTS playback failed") }
+                        } else {
+                            LocalAiRuntime.reset()
                         }
+                        if (voiceQueryInProgress.compareAndSet(token, null)) finishAiQuestionForegroundWork()
                     }
                 }
             } catch (cancelled: CancellationException) {
-                if (manualHandoff) AssistantRuntime.update { reset() }
-                if (voiceQueryInProgress.compareAndSet(queryToken, null)) {
-                    finishAiQuestionForegroundWork()
-                }
+                if (voiceQueryInProgress.compareAndSet(token, null)) finishAiQuestionForegroundWork()
                 throw cancelled
             } catch (error: Throwable) {
-                Log.e("MoyoungW620", "Could not process glasses AI dialogue", error)
-                if (manualHandoff) AssistantRuntime.update { fail("Local speech recognition failed. Try again.", sttFailed = true) }
+                Log.e("BV300LocalAI", "Local assistant turn failed", error)
+                LocalAiRuntime.update { it.copy(phase = LocalAiPhase.ERROR, error = error.message ?: "Local assistant failed") }
                 withContext(Dispatchers.Main) {
-                    if (voiceQueryInProgress.compareAndSet(queryToken, null)) {
-                        finishAiQuestionForegroundWork()
+                    speakMoyoungReply("Локальный ассистент не смог ответить. Проверьте модели в чате.", languageTag = "ru-RU") {
+                        if (voiceQueryInProgress.compareAndSet(token, null)) finishAiQuestionForegroundWork()
                     }
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Could not process the glasses voice question",
-                        Toast.LENGTH_LONG,
-                    ).show()
-                    speakMoyoungReply("I couldn't process that voice question. Please try again.")
                 }
-            } finally {
-                runCatching { wavFile.delete() }
             }
         }
     }
-
     private fun logMoyoungPcm16Stats(pcm16: ByteArray, sampleRateHz: Int) {
         val sampleCount = pcm16.size / 2
         if (sampleCount == 0) {

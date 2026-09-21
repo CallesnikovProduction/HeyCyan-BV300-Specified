@@ -5,6 +5,7 @@ data class LocalModelsConfigureUiState(
     val engineStatus: String = "Runtimes available: llama.cpp + LiteRT",
     val deviceSummary: String = "",
     val selectedModelStatus: String = "Status: not downloaded",
+    val voskStatus: String = "Vosk: missing",
     val emptyStateMessage: String = "",
     val installedModels: List<InstalledModelUiItem> = emptyList(),
     val selectedInstalledModelId: String? = null,
@@ -131,6 +132,7 @@ sealed interface LocalModelsAction {
     data object DiscardChangesAndBack : LocalModelsAction
     data object Refresh : LocalModelsAction
     data object ImportModel : LocalModelsAction
+    data object ImportVosk : LocalModelsAction
     data class SelectInstalledModel(val id: String) : LocalModelsAction
     data object ShowSelectedModelInfo : LocalModelsAction
     data object UnloadSelectedModel : LocalModelsAction

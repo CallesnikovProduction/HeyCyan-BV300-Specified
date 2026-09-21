@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
@@ -26,6 +27,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.fersaiyan.cyanbridge.MainActivity
+import com.fersaiyan.cyanbridge.localai.LocalAiRuntime
+import com.fersaiyan.cyanbridge.localai.LocalAiPhase
+import com.fersaiyan.cyanbridge.localai.model.LocalModelManager
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs as AutomationPrefs
 import com.fersaiyan.cyanbridge.agent.LocalModelsConfigureActivity
 import com.fersaiyan.cyanbridge.agent.ProSubscriptionAiPrefs
@@ -77,6 +81,7 @@ import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -101,6 +106,7 @@ class ChatThreadActivity : AppCompatActivity() {
     private var composerUiState by mutableStateOf(ChatComposerUiState())
     private var attachmentsUiState by mutableStateOf(ChatAttachmentsUiState())
     private var modelBadge by mutableStateOf<String?>(null)
+    private var voskReady by mutableStateOf(false)
     private var dailySummaryProgress by mutableStateOf<DailySummaryProgressUiState?>(null)
     private var dailyReviewQueueStatus by mutableStateOf<String?>(null)
     private var chatWallpaper by mutableStateOf<ImageBitmap?>(null)
@@ -183,11 +189,13 @@ class ChatThreadActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         configureThreadFromIntent(intent)
+        voskReady = LocalModelManager.hasVosk(this)
 
         val appearancePreferences = AppearancePreferences(this)
         setContent {
             val appearance by rememberAppearanceSettings(appearancePreferences)
             CyanBridgeTheme(appearance) {
+                val localAi by LocalAiRuntime.state.collectAsState()
                 val visibleMessages = ChatThreadStateReducer.visibleMessages(
                     messages = chatThreadUiState.messages,
                     chatId = chatId.orEmpty(),
@@ -199,7 +207,15 @@ class ChatThreadActivity : AppCompatActivity() {
                     messages = visibleMessages,
                     composer = composerUiState,
                     attachments = attachmentsUiState,
-                    modelBadge = modelBadge,
+                    modelBadge = if (isLocalModelsProviderSelected()) {
+                        listOfNotNull(
+                            modelBadge,
+                            "Vosk: ${if (voskReady) "ready" else "missing"}",
+                            "Assistant: ${localAi.phase.name.lowercase().replace('_', ' ')}",
+                            localAi.partialTranscript.takeIf(String::isNotBlank)?.let { "Heard: $it" },
+                            localAi.error,
+                        ).joinToString(" • ")
+                    } else modelBadge,
                     dailySummaryProgress = dailySummaryProgress,
                     dailyReviewQueueStatus = dailyReviewQueueStatus,
                     userBubbleColor = userBubbleColor,
@@ -232,6 +248,15 @@ class ChatThreadActivity : AppCompatActivity() {
         refreshMessages()
         refreshDailyReviewQueueStatusAsync()
         updatePendingAttachmentsUi()
+        lifecycleScope.launch {
+            var previousPhase = LocalAiRuntime.state.value.phase
+            LocalAiRuntime.state.collect { snapshot ->
+                if (snapshot.phase != previousPhase && (snapshot.phase == LocalAiPhase.IDLE || snapshot.phase == LocalAiPhase.ERROR)) {
+                    refreshMessages()
+                }
+                previousPhase = snapshot.phase
+            }
+        }
 
         // Auto-kickoff daily facts review.
         val cid = chatId
@@ -242,6 +267,7 @@ class ChatThreadActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        voskReady = LocalModelManager.hasVosk(this)
         applyChatAppearance()
         refreshModelBadge("Ready")
         updateComposerForGenerationState()
@@ -606,6 +632,10 @@ class ChatThreadActivity : AppCompatActivity() {
                 val selected = LocalModelStorageRepository.resolveSelectedModel(this)
                 if (selected == null) {
                     "Local model: none installed"
+                } else if (com.fersaiyan.cyanbridge.localai.model.GemmaArtifact.isCandidate(selected.fileName) &&
+                    !com.fersaiyan.cyanbridge.localai.model.GemmaArtifact.isVerified(selected)
+                ) {
+                    "Local model: ${selected.displayName} (invalid file; re-import Gemma)"
                 } else {
                     "Local model: ${selected.displayName} ($status)"
                 }

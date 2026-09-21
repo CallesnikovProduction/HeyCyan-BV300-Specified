@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
+import com.fersaiyan.cyanbridge.localai.model.LocalModelManager
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceSnapshot
@@ -50,6 +51,7 @@ import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsConfigureUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.LocalModelsSection
 import com.fersaiyan.cyanbridge.shared.localmodels.RemoteInferenceUiState
 import com.fersaiyan.cyanbridge.shared.localmodels.StudioBridgeUiState
+import com.fersaiyan.cyanbridge.shared.settings.AgentProviderType
 import com.fersaiyan.cyanbridge.shared.ui.localmodels.LocalModelsConfigureScreen
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
@@ -81,6 +83,12 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) importModel(uri)
+    }
+
+    private val importVoskLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) importVosk(uri)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -126,6 +134,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
             LocalModelsAction.DiscardChangesAndBack -> finish()
             LocalModelsAction.Refresh -> refreshAllUi(loadDrafts = !hasUnsavedChanges)
             LocalModelsAction.ImportModel -> importModelLauncher.launch(arrayOf("application/octet-stream", "*/*"))
+            LocalModelsAction.ImportVosk -> importVoskLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
             is LocalModelsAction.SelectInstalledModel -> selectModel(action.id)
             LocalModelsAction.ShowSelectedModelInfo -> showSelectedModelInfo()
             LocalModelsAction.UnloadSelectedModel -> unloadSelectedModel()
@@ -193,6 +202,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                 val exists = File(it.absolutePath).exists()
                 "${if (exists) "Ready" else "Missing file"} • ${humanSize(it.sizeBytes)}"
             } ?: "No model selected",
+            voskStatus = if (LocalModelManager.hasVosk(this)) "Vosk Russian: ready" else "Vosk Russian: missing — import vosk-model-small-ru-0.22.zip",
             emptyStateMessage = if (installedModels.isEmpty()) {
                 "No local model installed. Gemma 4 E2B is the recommended multimodal starter."
             } else "",
@@ -567,11 +577,33 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                         file.delete()
                         error("Imported file must be GGUF or LiteRT (.litertlm/.task)")
                     }
-                    LocalModelStorageRepository.registerImportedModel(
+                    if (com.fersaiyan.cyanbridge.localai.model.GemmaArtifact.isCandidate(file.name)) {
+                        val valid = file.length() == com.fersaiyan.cyanbridge.localai.model.GemmaArtifact.SIZE_BYTES &&
+                            LocalModelFileUtils.sha256Hex(file).equals(
+                                com.fersaiyan.cyanbridge.localai.model.GemmaArtifact.SHA256,
+                                ignoreCase = true,
+                            )
+                        if (!valid) {
+                            file.delete() // Only the just-created app-private copy; the SAF source is untouched.
+                            error("Gemma file differs from the verified E2B bundle. Re-download and import again.")
+                        }
+                    }
+                    val imported = LocalModelStorageRepository.registerImportedModel(
                         context = this@LocalModelsConfigureActivity,
                         displayName = file.nameWithoutExtension,
                         file = file,
                     )
+                    if (file.name.endsWith(".litertlm", ignoreCase = true) || file.name.endsWith(".task", ignoreCase = true)) {
+                        val defaults = LocalGenerationSettings.defaultsFor(null)
+                        LocalModelSettingsRepository.saveForModel(
+                            this@LocalModelsConfigureActivity,
+                            imported.id,
+                            defaults.copy(modelRuntime = LocalModelRuntime.LITERT),
+                        )
+                        RemoteOpenAiPrefs.setEnabled(this@LocalModelsConfigureActivity, false)
+                        LocalAgentPrefs.setProviderType(this@LocalModelsConfigureActivity, AgentProviderType.LOCAL_AGENT)
+                    }
+                    imported
                 }
             }
             result.fold(
@@ -584,6 +616,21 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                     refreshComposeState()
                 },
             )
+        }
+    }
+
+    private fun importVosk(uri: Uri) {
+        lifecycleScope.launch {
+            downloadState = LocalModelDownloadUiState(isInFlight = true, message = "Importing Vosk Russian model…")
+            refreshComposeState()
+            val result = withContext(Dispatchers.IO) {
+                runCatching { LocalModelManager.importVoskZip(this@LocalModelsConfigureActivity, uri) }
+            }
+            downloadState = result.fold(
+                onSuccess = { LocalModelDownloadUiState(message = "Vosk Russian model ready") },
+                onFailure = { LocalModelDownloadUiState(message = "Vosk import failed: ${it.message}") },
+            )
+            refreshComposeState()
         }
     }
 

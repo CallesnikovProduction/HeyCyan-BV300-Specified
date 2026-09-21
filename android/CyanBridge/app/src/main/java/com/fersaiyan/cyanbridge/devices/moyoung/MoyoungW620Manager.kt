@@ -2,6 +2,8 @@ package com.fersaiyan.cyanbridge.devices.moyoung
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.localai.audio.VoiceActivityDetector
+import com.fersaiyan.cyanbridge.localai.model.FreshPhotoGuard
 import com.moyoung.glasses.CRPBleClient
 import com.moyoung.glasses.conn.CRPBleConnection
 import com.moyoung.glasses.conn.CRPBleDevice
@@ -11,6 +13,7 @@ import com.moyoung.glasses.conn.listener.CRPBleConnectionStateListener
 import com.moyoung.glasses.conn.listener.CRPFeatureStateListener
 import com.moyoung.glasses.conn.listener.CRPWifiChangeListener
 import com.moyoung.glasses.conn.protos.RunningStatus
+import com.moyoung.glasses.conn.protos.TakePhoto
 import com.moyoung.glasses.conn.type.CRPWifiType
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -81,10 +84,13 @@ class MoyoungW620Manager private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val client = CRPBleClient.create(appContext)
     private val mediaMutex = Mutex()
+    private val photoMutex = Mutex()
     private val wifiStateEvents = MutableSharedFlow<WifiStateEvent>(extraBufferCapacity = 8)
     private val wifiConnectionEvents = MutableSharedFlow<Boolean>(extraBufferCapacity = 8)
     private val _aiDialogueAudio = MutableSharedFlow<MoyoungAiDialogueAudio>(extraBufferCapacity = 2)
     private val _state = MutableStateFlow(MoyoungW620State())
+    private val _aiDialogueListening = MutableStateFlow(false)
+    private val _aiSpeechDetected = MutableStateFlow(false)
 
     private var device: CRPBleDevice? = null
     private var connection: CRPBleConnection? = null
@@ -92,9 +98,14 @@ class MoyoungW620Manager private constructor(context: Context) {
     private var aiDialogueAudioBuffer = ByteArrayOutputStream()
     private var aiDialogueAudioBytes: Long = 0L
     private var aiDialogueAudioFrames: Long = 0L
+    private var aiVoiceActivityDetector = VoiceActivityDetector()
+    private var aiAutoStopSent = false
+    @Volatile private var pendingAiPhoto: CompletableDeferred<File>? = null
 
     val state: StateFlow<MoyoungW620State> = _state.asStateFlow()
     val aiDialogueAudio: SharedFlow<MoyoungAiDialogueAudio> = _aiDialogueAudio.asSharedFlow()
+    val aiDialogueListening: StateFlow<Boolean> = _aiDialogueListening.asStateFlow()
+    val aiSpeechDetected: StateFlow<Boolean> = _aiSpeechDetected.asStateFlow()
 
     @Synchronized
     fun connect(address: String, deviceName: String? = null) {
@@ -134,6 +145,10 @@ class MoyoungW620Manager private constructor(context: Context) {
     }
 
     fun disconnect() {
+        _aiDialogueListening.value = false
+        _aiSpeechDetected.value = false
+        pendingAiPhoto?.cancel()
+        pendingAiPhoto = null
         runCatching { connection?.disableWifi() }
         runCatching { device?.disconnect() }
         device = null
@@ -159,6 +174,26 @@ class MoyoungW620Manager private constructor(context: Context) {
 
     fun requestMediaCount() {
         connectedOrNull()?.queryNewMediaFile()
+    }
+
+    suspend fun captureFreshAiPhoto(requestStartedAtMs: Long): File = photoMutex.withLock {
+        val activeConnection = connectedOrNull() ?: throw IOException("BV300 disconnected before photo capture")
+        val pending = CompletableDeferred<File>()
+        pendingAiPhoto = pending
+        try {
+            activeConnection.takePhoto(TakePhoto.PhotoMode.ModeAIRecognition)
+            val source = withTimeout(30_000L) { pending.await() }
+            check(FreshPhotoGuard.isFresh(source, requestStartedAtMs)) {
+                "BV300 camera returned a stale or empty image"
+            }
+            val destinationDirectory = File(appContext.filesDir, "local_ai_photos")
+            check(destinationDirectory.mkdirs() || destinationDirectory.isDirectory)
+            val destination = File(destinationDirectory, "bv300_${requestStartedAtMs}.jpg")
+            source.copyTo(destination, overwrite = false)
+            destination
+        } finally {
+            if (pendingAiPhoto === pending) pendingAiPhoto = null
+        }
     }
 
     fun stopMediaSync() {
@@ -232,6 +267,9 @@ class MoyoungW620Manager private constructor(context: Context) {
                     )
                 }
                 else -> {
+                    _aiDialogueListening.value = false
+                    _aiSpeechDetected.value = false
+                    pendingAiPhoto?.cancel()
                     _state.value = _state.value.copy(
                         connectionLabel = "MoYoung / W620 disconnected",
                         protocolState = "DISCONNECTED",
@@ -258,10 +296,14 @@ class MoyoungW620Manager private constructor(context: Context) {
         }
         activeConnection.setAiDialogueListener(object : CRPAiDialogueListener {
             override fun onDialogueStart() {
+                _aiDialogueListening.value = true
+                _aiSpeechDetected.value = false
                 synchronized(aiDialogueAudioLock) {
                     aiDialogueAudioBuffer = ByteArrayOutputStream()
                     aiDialogueAudioBytes = 0L
                     aiDialogueAudioFrames = 0L
+                    aiVoiceActivityDetector = VoiceActivityDetector()
+                    aiAutoStopSent = false
                 }
                 Log.i(TAG, "AI dialogue started from glasses")
             }
@@ -272,7 +314,14 @@ class MoyoungW620Manager private constructor(context: Context) {
                     aiDialogueAudioBuffer.write(audio)
                     aiDialogueAudioFrames += 1L
                     aiDialogueAudioBytes += audio.size
-                    aiDialogueAudioFrames to aiDialogueAudioBytes
+                    val shouldStop = aiVoiceActivityDetector.accept(audio) && !aiAutoStopSent
+                    if (shouldStop) aiAutoStopSent = true
+                    if (aiVoiceActivityDetector.speechDetected) _aiSpeechDetected.value = true
+                    Triple(aiDialogueAudioFrames, aiDialogueAudioBytes, shouldStop)
+                }
+                if (snapshot.third) {
+                    runCatching { activeConnection.exitAIDialogue() }
+                        .onFailure { Log.w(TAG, "Could not auto-end AI dialogue", it) }
                 }
                 if (snapshot.first == 1L || snapshot.first % 100L == 0L) {
                     Log.i(
@@ -288,9 +337,14 @@ class MoyoungW620Manager private constructor(context: Context) {
                     TAG,
                     "AI dialogue image path=${image?.absolutePath.orEmpty()} exists=${image?.isFile == true}",
                 )
+                if (image != null && pendingAiPhoto?.isCompleted == false) {
+                    pendingAiPhoto?.complete(image)
+                }
             }
 
             override fun onDialogueStop(cancelled: Boolean) {
+                _aiDialogueListening.value = false
+                _aiSpeechDetected.value = false
                 val completed = synchronized(aiDialogueAudioLock) {
                     val audio = aiDialogueAudioBuffer.toByteArray()
                     aiDialogueAudioBuffer = ByteArrayOutputStream()
