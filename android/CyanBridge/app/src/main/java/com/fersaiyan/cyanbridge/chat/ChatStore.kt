@@ -9,7 +9,10 @@ import com.fersaiyan.cyanbridge.data.repository.CyanBridgeRepository
 import com.fersaiyan.cyanbridge.ui.MyApplication
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
+import java.io.File
 
 /**
  * In-process chat store used by Activities for quick synchronous access.
@@ -26,6 +29,11 @@ import java.util.UUID
  *   synchronous and avoid rewriting the UI layer around coroutines.
  */
 object ChatStore {
+
+    data class MessageChange(val chatId: String, val revision: Long)
+    private var messageRevision = 0L
+    private val mutableMessageChange = MutableStateFlow<MessageChange?>(null)
+    val messageChanges = mutableMessageChange.asStateFlow()
 
     private val lock = Any()
 
@@ -90,6 +98,7 @@ object ChatStore {
                             role = role,
                             content = e.content,
                             createdAt = e.createdAt,
+                            imageAttachmentName = e.imageAttachmentName,
                         )
                     }.toMutableList()
                 }
@@ -165,8 +174,12 @@ object ChatStore {
         role: ChatRole,
         content: String,
         nowMs: Long = System.currentTimeMillis(),
+        imageAttachmentName: String? = null,
     ): ChatMessage {
         require(content.isNotBlank()) { "message content cannot be blank" }
+        require(imageAttachmentName == null || (imageAttachmentName == File(imageAttachmentName).name && imageAttachmentName.endsWith(".jpg"))) {
+            "invalid private photo filename"
+        }
         ensureMessagesLoaded(chatId)
 
         val threadIndex = threads.indexOfFirst { it.id == chatId }
@@ -179,6 +192,7 @@ object ChatStore {
             role = role,
             content = content,
             createdAt = nowMs,
+            imageAttachmentName = imageAttachmentName,
         )
 
         val list = messagesByChatId.getOrPut(chatId) { mutableListOf() }
@@ -205,6 +219,7 @@ object ChatStore {
                         role = msg.role.name,
                         content = msg.content,
                         createdAt = msg.createdAt,
+                        imageAttachmentName = msg.imageAttachmentName,
                     )
                 )
 
@@ -220,7 +235,42 @@ object ChatStore {
             }
         }
 
+        publishMessageChange(chatId)
         return msg
+    }
+
+    /** Updates one streamed assistant bubble, never creating a sentence-per-message thread. */
+    @Synchronized
+    fun updateAssistantMessage(chatId: String, messageId: String, content: String): Boolean {
+        require(content.isNotBlank()) { "message content cannot be blank" }
+        ensureMessagesLoaded(chatId)
+        val list = messagesByChatId[chatId] ?: return false
+        val index = list.indexOfFirst { it.id == messageId && it.role == ChatRole.ASSISTANT }
+        if (index < 0) return false
+        val previous = list[index]
+        if (previous.content == content) return true
+        val updated = previous.copy(content = content)
+        list[index] = updated
+        repositoryOrNull()?.let { repository ->
+            runBlocking(Dispatchers.IO) {
+                repository.insertMessage(
+                    MessageEntity(
+                        id = updated.id,
+                        chatId = updated.chatId,
+                        role = updated.role.name,
+                        content = updated.content,
+                        createdAt = updated.createdAt,
+                        imageAttachmentName = updated.imageAttachmentName,
+                    ),
+                )
+            }
+        }
+        publishMessageChange(chatId)
+        return true
+    }
+
+    private fun publishMessageChange(chatId: String) {
+        mutableMessageChange.value = MessageChange(chatId, ++messageRevision)
     }
 
     @Synchronized
@@ -259,6 +309,7 @@ object ChatStore {
     @Synchronized
     fun deleteThread(chatId: String) {
         ensureLoaded()
+        val ownedPhotos = listMessages(chatId).mapNotNull { it.imageAttachmentName }
         val repository = repositoryOrNull()
         if (repository != null) {
             runBlocking(Dispatchers.IO) {
@@ -268,10 +319,13 @@ object ChatStore {
         }
         threads.removeAll { it.id == chatId }
         messagesByChatId.remove(chatId)
+        deleteOwnedPhotos(ownedPhotos)
     }
 
     @Synchronized
     fun clearAll() {
+        ensureLoaded()
+        val ownedPhotos = threads.flatMap { listMessages(it.id).mapNotNull(ChatMessage::imageAttachmentName) }
         val repository = repositoryOrNull()
         if (repository != null) {
             // Clear DB first, then local cache.
@@ -285,5 +339,14 @@ object ChatStore {
         threads.clear()
         messagesByChatId.clear()
         loaded = true
+        deleteOwnedPhotos(ownedPhotos)
+    }
+
+    private fun deleteOwnedPhotos(names: List<String>) {
+        val context = runCatching { MyApplication.CONTEXT }.getOrNull() ?: return
+        val directory = File(context.filesDir, "local_ai_photos")
+        names.filter { it == File(it).name && it.endsWith(".jpg") }.forEach { name ->
+            File(directory, name).delete()
+        }
     }
 }

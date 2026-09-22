@@ -28,6 +28,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
+internal fun canRetryWithoutImage(hasUserContents: Boolean, imagePaths: List<String>): Boolean =
+    hasUserContents && imagePaths.isEmpty()
+
 class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CONTEXT) : LocalInferenceEngine {
     private val supportedAudioExtensions = setOf("wav", "mp3", "flac")
 
@@ -275,7 +278,7 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
                     generateFromConversation(conversation, config.prompt, userContents, onToken)
                 }.recoverCatching {
                     // A visual request must never silently become a text-only answer.
-                    if (userContents == null || config.imagePaths.isNotEmpty()) throw it
+                    if (!canRetryWithoutImage(userContents != null, config.imagePaths)) throw it
                     generateFromConversation(conversation, config.prompt, null, onToken)
                 }.getOrThrow()
             }

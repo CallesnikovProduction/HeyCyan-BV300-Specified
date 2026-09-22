@@ -126,6 +126,7 @@ fun LocalModelsConfigureScreen(
                     if (state.deviceSummary.isNotBlank()) SupportingText(state.deviceSummary)
                     SupportingText(state.selectedModelStatus)
                     SupportingText(state.voskStatus)
+                    SupportingText(state.supertonicStatus)
                     if (state.installedModels.isNotEmpty()) {
                         ChoiceField(
                             label = "Selected model",
@@ -156,6 +157,20 @@ fun LocalModelsConfigureScreen(
                         secondaryLabel = "Refresh",
                         onSecondary = { onAction(LocalModelsAction.Refresh) },
                     )
+                    ActionRow(
+                        primaryLabel = "Import Supertonic 3 TTS (.tar.bz2)",
+                        onPrimary = { onAction(LocalModelsAction.ImportSupertonic) },
+                        secondaryLabel = "Refresh",
+                        onSecondary = { onAction(LocalModelsAction.Refresh) },
+                    )
+                    if (state.supertonicStatus.contains("ready")) {
+                        ActionRow(
+                            primaryLabel = "Test Russian voice in BV300",
+                            onPrimary = { onAction(LocalModelsAction.TestSupertonic) },
+                            secondaryLabel = "Test English",
+                            onSecondary = { onAction(LocalModelsAction.TestSupertonicEnglish) },
+                        )
+                    }
                     if (state.selectedInstalledModelId != null) {
                         ActionRow(
                             primaryLabel = "Model info",

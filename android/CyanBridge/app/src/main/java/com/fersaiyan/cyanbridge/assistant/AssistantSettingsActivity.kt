@@ -4,11 +4,16 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,12 +49,22 @@ import com.fersaiyan.cyanbridge.agent.ProSubscriptionRelayClient
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
+import com.fersaiyan.cyanbridge.localai.Bv300BackgroundAssistantService
+import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
+import com.fersaiyan.cyanbridge.localai.LocalAiPhase
+import com.fersaiyan.cyanbridge.localai.LocalAiRuntime
+import com.fersaiyan.cyanbridge.localai.SupertonicVoicePrefs
+import com.fersaiyan.cyanbridge.localai.model.LocalModelManager
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class AssistantSettingsActivity : AppCompatActivity() {
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) startBackgroundAssistantIfReady()
+        else Toast.makeText(this, "Notifications are required for the visible BV300 background control", Toast.LENGTH_LONG).show()
+    }
     private var manualMode by mutableStateOf(false)
     private var autoSendMode by mutableStateOf(false)
     private var testPrompt by mutableStateOf("Answer with one word: ready")
@@ -62,6 +77,8 @@ class AssistantSettingsActivity : AppCompatActivity() {
     private var systemPrompt by mutableStateOf("")
     private var availableModels by mutableStateOf(listOf("auto", "google/gemini-3.1-flash-live-preview"))
     private var modelCatalogStatus by mutableStateOf("")
+    private var localVoiceId by mutableStateOf(0)
+    private var localVoiceSpeed by mutableStateOf(1.0f)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +89,8 @@ class AssistantSettingsActivity : AppCompatActivity() {
         tasksModel = ProSubscriptionAiPrefs.getTasksModel(this)
         systemPrompt = ProSubscriptionAiPrefs.getSystemPrompt(this)
         availableModels = (availableModels + requestsModel + questionsModel + tasksModel).distinct()
+        localVoiceId = SupertonicVoicePrefs.speakerId(this)
+        localVoiceSpeed = SupertonicVoicePrefs.speed(this)
         val appearancePreferences = AppearancePreferences(this)
         setContent {
             val appearance by rememberAppearanceSettings(appearancePreferences)
@@ -86,6 +105,7 @@ class AssistantSettingsActivity : AppCompatActivity() {
         val chatGptStatus by ChatGptUiAutomation.status.collectAsState()
         val lastChatGptReply by ChatGptUiAutomation.lastReply.collectAsState()
         val device by DiagnosticsStore.state.collectAsState()
+        val backgroundAssistantRunning by Bv300BackgroundAssistantService.isRunning.collectAsState()
         Scaffold(topBar = { TopAppBar(title = { Text("BV300 Assistant") }) }) { padding ->
             Column(
                 modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
@@ -108,6 +128,50 @@ class AssistantSettingsActivity : AppCompatActivity() {
                 Text("Speech recognition: ${assistant.lastStt} · local model required")
                 Text("Speech output: local TTS to BV300 · ${assistant.lastTts}")
                 Text("Assistant: ${assistant.phase.name}")
+
+                Text("BV300 local assistant in background", style = MaterialTheme.typography.titleMedium)
+                Text("Enable while BV300 is connected. The glasses button then works over other apps and with the screen off. The ongoing notification has a Stop action. Voice and photos stay local.")
+                androidx.compose.foundation.layout.Row {
+                    Text("Keep BV300 assistant ready", modifier = Modifier.weight(1f))
+                    Switch(checked = backgroundAssistantRunning, onCheckedChange = { enabled ->
+                        if (enabled) {
+                            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(
+                                    this@AssistantSettingsActivity, Manifest.permission.POST_NOTIFICATIONS,
+                                ) != PackageManager.PERMISSION_GRANTED) {
+                                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else startBackgroundAssistantIfReady()
+                        } else Bv300BackgroundAssistantService.stop(this@AssistantSettingsActivity)
+                    })
+                }
+
+                Text("Offline BV300 voice", style = MaterialTheme.typography.titleMedium)
+                Text(if (LocalModelManager.hasSupertonic(this@AssistantSettingsActivity))
+                    "Supertonic 3 is installed. Russian and English use the same selected voice."
+                    else "Supertonic 3 is missing; import it in Local Models before using the local assistant.")
+                var voiceMenuExpanded by remember { mutableStateOf(false) }
+                OutlinedButton(onClick = { voiceMenuExpanded = true }) {
+                    Text("Voice: ${SupertonicVoicePrefs.femaleVoices[localVoiceId]}")
+                }
+                DropdownMenu(expanded = voiceMenuExpanded, onDismissRequest = { voiceMenuExpanded = false }) {
+                    SupertonicVoicePrefs.femaleVoices.forEachIndexed { id, name ->
+                        DropdownMenuItem(text = { Text(name) }, onClick = {
+                            voiceMenuExpanded = false
+                            localVoiceId = id
+                            SupertonicVoicePrefs.setSpeakerId(this@AssistantSettingsActivity, id)
+                        })
+                    }
+                }
+                var speedMenuExpanded by remember { mutableStateOf(false) }
+                OutlinedButton(onClick = { speedMenuExpanded = true }) { Text("Voice speed: ${localVoiceSpeed}×") }
+                DropdownMenu(expanded = speedMenuExpanded, onDismissRequest = { speedMenuExpanded = false }) {
+                    listOf(0.8f, 1.0f, 1.2f, 1.4f).forEach { speed ->
+                        DropdownMenuItem(text = { Text("${speed}×") }, onClick = {
+                            speedMenuExpanded = false
+                            localVoiceSpeed = speed
+                            SupertonicVoicePrefs.setSpeed(this@AssistantSettingsActivity, speed)
+                        })
+                    }
+                }
 
                 Text("AI model settings", style = MaterialTheme.typography.titleMedium)
                 Text("These preferences control the configured AI relay; they do not change the local STT or TTS models.")
@@ -217,6 +281,16 @@ class AssistantSettingsActivity : AppCompatActivity() {
                     Text("Last STT: ${assistant.lastStt} · Last TTS: ${assistant.lastTts}")
                 }
             }
+        }
+    }
+
+    private fun startBackgroundAssistantIfReady() {
+        if (MoyoungW620Manager.getInstance(this).isConnected() &&
+            LocalAiRuntime.state.value.phase in listOf(LocalAiPhase.IDLE, LocalAiPhase.ERROR)) {
+            runCatching { Bv300BackgroundAssistantService.start(this) }
+                .onFailure { Toast.makeText(this, it.message ?: "Could not start background assistant", Toast.LENGTH_LONG).show() }
+        } else {
+            Toast.makeText(this, "Connect BV300 and finish the current request first", Toast.LENGTH_LONG).show()
         }
     }
 

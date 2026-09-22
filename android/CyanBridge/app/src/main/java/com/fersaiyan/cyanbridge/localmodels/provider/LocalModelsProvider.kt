@@ -36,11 +36,22 @@ internal fun buildMultimodalPrompt(
     val userRequest = messages.lastOrNull { it.role.equals("user", ignoreCase = true) }
         ?.content
         ?: messages.lastOrNull()?.content.orEmpty()
+    val conversation = messages
+        .filter { it.role.equals("user", ignoreCase = true) || it.role.equals("assistant", ignoreCase = true) }
+        .dropLast(1)
+        .takeLast(10)
 
     return buildString {
         if (systemInstructions.isNotEmpty()) {
             appendLine("System instructions:")
             appendLine(systemInstructions.joinToString("\n\n"))
+            appendLine()
+        }
+        if (conversation.isNotEmpty()) {
+            appendLine("Recent conversation:")
+            conversation.forEach { message ->
+                appendLine("${message.role}: ${message.content}")
+            }
             appendLine()
         }
         append("User request: ")

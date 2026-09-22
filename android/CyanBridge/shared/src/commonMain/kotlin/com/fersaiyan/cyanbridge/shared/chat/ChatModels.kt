@@ -11,6 +11,8 @@ data class ChatMessage(
     val role: ChatRole,
     val content: String,
     val createdAt: Long,
+    /** App-private BV300 photo filename, never a public URI or a cache path. */
+    val imageAttachmentName: String? = null,
 )
 
 data class ChatThread(

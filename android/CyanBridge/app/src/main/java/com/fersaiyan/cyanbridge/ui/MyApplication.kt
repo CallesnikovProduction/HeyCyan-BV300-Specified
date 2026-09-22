@@ -291,6 +291,7 @@ class MyApplication : Application(){
                     com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_5_6,
                     com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_6_7,
                     com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_7_8,
+                    com.fersaiyan.cyanbridge.data.local.AppDatabase.MIGRATION_8_9,
                 )
                 .addCallback(
                     object : androidx.room.RoomDatabase.Callback() {

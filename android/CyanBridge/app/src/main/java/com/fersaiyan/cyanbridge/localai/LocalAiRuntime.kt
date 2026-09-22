@@ -7,7 +7,7 @@ enum class LocalAiPhase { IDLE, LISTENING, SPEECH_DETECTED, FINALIZING_STT, THIN
 
 internal object LocalAiTransitions {
     fun allows(from: LocalAiPhase, to: LocalAiPhase): Boolean = when {
-        from == to || to == LocalAiPhase.ERROR || to == LocalAiPhase.IDLE -> true
+        from == to || to == LocalAiPhase.ERROR || to == LocalAiPhase.IDLE || to == LocalAiPhase.LISTENING -> true
         from == LocalAiPhase.IDLE || from == LocalAiPhase.ERROR ->
             to == LocalAiPhase.LISTENING || to == LocalAiPhase.FINALIZING_STT
         from == LocalAiPhase.LISTENING ->
@@ -24,6 +24,10 @@ data class LocalAiSnapshot(
     val partialTranscript: String = "",
     val transcript: String = "",
     val error: String? = null,
+    /** Internal stages may overlap even though the public phase is a single label. */
+    val modelGenerating: Boolean = false,
+    val ttsSynthesizing: Boolean = false,
+    val audioPlaying: Boolean = false,
 )
 
 object LocalAiRuntime {
@@ -38,4 +42,6 @@ object LocalAiRuntime {
     }
 
     fun reset() { mutableState.value = LocalAiSnapshot() }
+
+    fun beginListening() { mutableState.value = LocalAiSnapshot(phase = LocalAiPhase.LISTENING) }
 }

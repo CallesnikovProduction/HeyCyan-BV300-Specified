@@ -130,6 +130,7 @@
             android:exported="false"
             android:process=":benchmark_mtp_on" />
         <service android:name=".ai.AiQuestionForegroundService" android:exported="false" android:foregroundServiceType="connectedDevice|dataSync|microphone" />
+        <service android:name=".localai.Bv300BackgroundAssistantService" android:exported="false" android:foregroundServiceType="connectedDevice|mediaPlayback" />
         <service android:name=".ai.live.GeminiLiveForegroundService" android:exported="false" android:foregroundServiceType="microphone|connectedDevice|mediaPlayback|dataSync" />
         <service android:name=".plugins.walkingaid.WalkingAidService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".plugins.meetingsparknotes.MeetingSparkNotesService" android:exported="false" android:foregroundServiceType="microphone" />

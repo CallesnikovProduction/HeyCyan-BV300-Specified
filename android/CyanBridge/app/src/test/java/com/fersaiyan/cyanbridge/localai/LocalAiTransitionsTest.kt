@@ -18,8 +18,10 @@ class LocalAiTransitionsTest {
         phases.zipWithNext().forEach { (from, to) -> assertTrue(LocalAiTransitions.allows(from, to)) }
     }
 
-    @Test fun delayedButtonAndCancellationCannotRegressState() {
-        assertFalse(LocalAiTransitions.allows(LocalAiPhase.THINKING, LocalAiPhase.LISTENING))
+    @Test fun buttonPreemptsThinkingSpeakingAndFinalizing() {
+        assertTrue(LocalAiTransitions.allows(LocalAiPhase.THINKING, LocalAiPhase.LISTENING))
+        assertTrue(LocalAiTransitions.allows(LocalAiPhase.SPEAKING, LocalAiPhase.LISTENING))
+        assertTrue(LocalAiTransitions.allows(LocalAiPhase.FINALIZING_STT, LocalAiPhase.LISTENING))
         assertFalse(LocalAiTransitions.allows(LocalAiPhase.FINALIZING_STT, LocalAiPhase.SPEECH_DETECTED))
         assertTrue(LocalAiTransitions.allows(LocalAiPhase.THINKING, LocalAiPhase.ERROR))
         assertTrue(LocalAiTransitions.allows(LocalAiPhase.ERROR, LocalAiPhase.IDLE))

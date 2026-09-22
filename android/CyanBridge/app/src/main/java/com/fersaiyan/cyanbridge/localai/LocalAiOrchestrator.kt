@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.localai
 
 import android.content.Context
 import com.fersaiyan.cyanbridge.chat.ChatStore
+import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.localai.model.LocalModelManager
 import com.fersaiyan.cyanbridge.localai.model.FreshPhotoGuard
 import com.fersaiyan.cyanbridge.localai.model.GemmaArtifact
@@ -17,21 +18,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** Owns one BV300 utterance at a time; hardware capture and TTS remain in the device/UI layer. */
+/** Processes a BV300 utterance; only its current requestId may publish a result. */
 class LocalAiOrchestrator(
     private val context: Context,
     private val stt: RussianSpeechRecognizer,
-    private val captureFreshPhoto: suspend (Long) -> File,
+    private val captureFreshPhoto: suspend (String, Long) -> File,
+    private val ownership: Bv300TurnOwnership = bv300TurnOwnership,
+    private val visualIntent: VisualIntentDecision = VisualIntentRouter,
 ) {
-    private val turnMutex = Mutex()
     private val provider = LocalModelsProvider()
 
-    suspend fun process(pcm16: ByteArray, sampleRateHz: Int): String {
-        check(turnMutex.tryLock()) { "Local assistant is already processing a request" }
+    internal suspend fun process(
+        pcm16: ByteArray,
+        sampleRateHz: Int,
+        requestId: String,
+        timings: Bv300StreamingTimings,
+        onSentence: (String) -> Unit,
+    ): String {
+        ownership.requireCurrent(requestId)
         try {
             check(LocalModelManager.hasVosk(context)) { "Vosk model missing. Import the Russian ZIP in Local Models." }
             check(!RemoteOpenAiPrefs.isActive(context)) { "Remote model is enabled. Switch to local Gemma in Local Models." }
@@ -43,22 +50,23 @@ class LocalAiOrchestrator(
             check(LocalModelSettingsRepository.getForModel(context, selected.id).modelRuntime == LocalModelRuntime.LITERT) {
                 "Set Gemma runtime to LiteRT in Local Models."
             }
-            LocalAiRuntime.update { it.copy(phase = LocalAiPhase.FINALIZING_STT, error = null) }
+            updateIfCurrent(requestId) { it.copy(phase = LocalAiPhase.FINALIZING_STT, error = null) }
             val transcript = stt.recognizePcm16(pcm16, sampleRateHz) { partial ->
-                LocalAiRuntime.update { it.copy(partialTranscript = partial) }
+                updateIfCurrent(requestId) { it.copy(partialTranscript = partial) }
             }.trim()
             check(transcript.isNotBlank()) { "Vosk did not recognize speech. Try speaking closer to BV300." }
-            currentCoroutineContext().ensureActive()
-            LocalAiRuntime.update { it.copy(phase = LocalAiPhase.THINKING, transcript = transcript, partialTranscript = "") }
+            ensureCurrent(requestId)
+            updateIfCurrent(requestId) { it.copy(phase = LocalAiPhase.THINKING, transcript = transcript, partialTranscript = "") }
 
-            val image = if (VisualIntentRouter.needsFreshPhoto(transcript)) {
+            val image = if (visualIntent.requiresVision(transcript)) {
                 val requestStartedAtMs = System.currentTimeMillis()
-                captureFreshPhoto(requestStartedAtMs).also { photo ->
-                    check(FreshPhotoGuard.isFresh(photo, requestStartedAtMs)) {
-                        "BV300 returned no fresh photo for this request"
+                captureFreshPhoto(requestId, requestStartedAtMs).also { photo ->
+                    check(FreshPhotoGuard.isOwnedFresh(photo, requestId, requestStartedAtMs)) {
+                        "BV300 returned no fresh photo belonging to this request"
                     }
                 }
             } else null
+            ensureCurrent(requestId)
 
             val chatId = assistantChatId()
             val history = ChatStore.listMessages(chatId).takeLast(10).map { message ->
@@ -68,38 +76,114 @@ class LocalAiOrchestrator(
                 )
             }
             val messages = listOf(
-                mapOf("role" to "system", "content" to "Отвечай по-русски, кратко и понятно для голосового ответа в очках."),
-            ) + history + mapOf("role" to "user", "content" to transcript)
-            ChatStore.addMessage(chatId, ChatRole.USER, transcript)
-            val reply = provider.streamChat(
-                context = context,
-                messages = messages,
-                imagePaths = image?.let { listOf(it.absolutePath) }.orEmpty(),
-            ).trim()
-            currentCoroutineContext().ensureActive()
+                mapOf("role" to "system", "content" to Bv300VoicePrompt.SYSTEM),
+            ) + history + mapOf("role" to "user", "content" to Bv300VoicePrompt.userContent(transcript, image != null))
+            ensureCurrent(requestId)
+            ChatStore.addMessage(chatId, ChatRole.USER, transcript, imageAttachmentName = image?.name)
+            ensureCurrent(requestId)
+            val arithmetic = if (image == null) SimpleSpokenArithmetic.answerIfUnambiguous(transcript) else null
+            if (arithmetic != null) {
+                if (!ownership.publishIfCurrent(requestId) {
+                    ChatStore.addMessage(chatId, ChatRole.ASSISTANT, arithmetic)
+                }) throw CancellationException("BV300 request was preempted before publishing its reply")
+                timings.firstSentence()
+                onSentence(arithmetic)
+                return arithmetic
+            }
+
+            val sentenceChunker = SentenceChunker()
+            val streamed = StringBuilder()
+            var assistantMessageId: String? = null
+            var lastChatPublishNanos = 0L
+            fun publishDraft(force: Boolean = false) {
+                val content = streamed.toString().trim()
+                if (content.isBlank()) return
+                val now = System.nanoTime()
+                if (!force && assistantMessageId != null && now - lastChatPublishNanos < 180_000_000L) return
+                if (!ownership.publishIfCurrent(requestId) {
+                    val id = assistantMessageId
+                    if (id == null) {
+                        assistantMessageId = ChatStore.addMessage(chatId, ChatRole.ASSISTANT, content).id
+                    } else {
+                        check(ChatStore.updateAssistantMessage(chatId, id, content)) { "Assistant draft disappeared" }
+                    }
+                }) throw CancellationException("BV300 request was preempted while streaming its reply")
+                lastChatPublishNanos = now
+            }
+            fun acceptDelta(delta: String) {
+                if (delta.isEmpty()) return
+                ownership.requireCurrent(requestId)
+                timings.firstToken()
+                streamed.append(delta)
+                publishDraft()
+                sentenceChunker.append(delta).forEach { sentence ->
+                    timings.firstSentence()
+                    onSentence(sentence)
+                }
+            }
+
+            updateIfCurrent(requestId) { it.copy(modelGenerating = true) }
+            val modelReply = try {
+                provider.streamChat(
+                    context = context,
+                    messages = messages,
+                    onToken = ::acceptDelta,
+                    imagePaths = image?.let { listOf(it.absolutePath) }.orEmpty(),
+                ).trim()
+            } finally {
+                updateIfCurrent(requestId) { it.copy(modelGenerating = false) }
+                timings.generationFinished()
+                if (ownership.isCurrent(requestId)) publishDraft(force = true)
+            }
+            ensureCurrent(requestId)
+            val streamedRaw = streamed.toString()
+            val reply = when {
+                streamedRaw.isBlank() -> modelReply
+                modelReply.startsWith(streamedRaw) -> modelReply
+                else -> streamedRaw.trim() // Never replace already-spoken tokens with a divergent retry/result.
+            }
             check(reply.isNotBlank()) { "Gemma returned an empty response" }
-            ChatStore.addMessage(chatId, ChatRole.ASSISTANT, reply)
-            LocalAiRuntime.update { it.copy(phase = LocalAiPhase.SPEAKING) }
+            if (streamedRaw.isBlank()) {
+                acceptDelta(reply)
+            } else if (reply.length > streamedRaw.length && reply.startsWith(streamedRaw)) {
+                acceptDelta(reply.substring(streamedRaw.length))
+            }
+            sentenceChunker.finish().forEach { sentence ->
+                timings.firstSentence()
+                onSentence(sentence)
+            }
+            publishDraft(force = true)
+            ensureCurrent(requestId)
             return reply
         } catch (cancelled: CancellationException) {
-            withContext(NonCancellable + Dispatchers.IO) { provider.cancelGeneration() }
-            LocalAiRuntime.update {
-                it.copy(phase = LocalAiPhase.ERROR, error = cancelled.message ?: "Generation cancelled")
+            if (ownership.isCurrent(requestId)) {
+                withContext(NonCancellable + Dispatchers.IO) { provider.cancelGeneration() }
             }
             throw cancelled
         } catch (error: Throwable) {
-            LocalAiRuntime.update { it.copy(phase = LocalAiPhase.ERROR, error = error.message ?: "Local assistant failed") }
+            updateIfCurrent(requestId) { it.copy(phase = LocalAiPhase.ERROR, error = error.message ?: "Local assistant failed") }
             throw error
-        } finally {
-            turnMutex.unlock()
         }
     }
 
+    private suspend fun ensureCurrent(requestId: String) {
+        currentCoroutineContext().ensureActive()
+        ownership.requireCurrent(requestId)
+    }
+
+    private fun updateIfCurrent(requestId: String, transform: (LocalAiSnapshot) -> LocalAiSnapshot) {
+        ownership.updateIfCurrent(requestId, transform)
+    }
+
     private suspend fun assistantChatId(): String = withContext(Dispatchers.IO) {
+        val sessionId = MoyoungW620Manager.getInstance(context).connectionSessionId
+            ?: error("BV300 disconnected before starting the local assistant")
         val prefs = context.getSharedPreferences("bv300_local_assistant", Context.MODE_PRIVATE)
-        prefs.getString("chat_id", null)?.takeIf { ChatStore.getThread(it) != null } ?: run {
-            val created = ChatStore.createThread("BV300 Local AI")
-            prefs.edit().putString("chat_id", created.id).apply()
+        prefs.getString("chat_id", null)?.takeIf {
+            prefs.getString("connection_session_id", null) == sessionId && ChatStore.getThread(it) != null
+        } ?: run {
+            val created = ChatStore.createThread("BV300 Local AI · ${java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}")
+            prefs.edit().putString("chat_id", created.id).putString("connection_session_id", sessionId).apply()
             created.id
         }
     }

@@ -20,4 +20,20 @@ class LocalModelsProviderTest {
         assertTrue(prompt.contains("Keep answers brief."))
         assertTrue(prompt.contains("User request: Describe this image."))
     }
+
+    @Test
+    fun multimodalPromptKeepsRecentConversationAndOriginalVisualQuestion() {
+        val prompt = buildMultimodalPrompt(
+            configuredSystemPrompt = "",
+            messages = listOf(
+                PromptMessage("system", "BV300 fresh image only"),
+                PromptMessage("user", "На прошлом снимке была книга"),
+                PromptMessage("assistant", "Да, книга на столе"),
+                PromptMessage("user", "Сфоткай и прочитай, что здесь написано"),
+            ),
+        )
+        assertTrue(prompt.contains("На прошлом снимке была книга"))
+        assertTrue(prompt.contains("Да, книга на столе"))
+        assertTrue(prompt.contains("User request: Сфоткай и прочитай, что здесь написано"))
+    }
 }

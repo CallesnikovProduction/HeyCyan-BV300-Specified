@@ -5,11 +5,81 @@ import android.net.Uri
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
+import com.fersaiyan.cyanbridge.localai.SupertonicTts
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 
 /** Fixed model locations for the personal BV300 assistant. The Gemma importer already lives in Local Models. */
 object LocalModelManager {
     private const val VOSK_DIRECTORY = "vosk-model"
     private const val MAX_VOSK_UNPACKED_BYTES = 512L * 1024L * 1024L
+    private const val SUPERTONIC_DIRECTORY = "supertonic3-tts"
+    private const val SUPERTONIC_ARCHIVE_ROOT = "sherpa-onnx-supertonic-3-tts-int8-2026-05-11"
+    private const val MAX_SUPERTONIC_UNPACKED_BYTES = 180L * 1024L * 1024L
+    private val supertonicFiles = setOf(
+        "duration_predictor.int8.onnx", "text_encoder.int8.onnx",
+        "vector_estimator.int8.onnx", "vocoder.int8.onnx",
+        "tts.json", "unicode_indexer.bin", "voice.bin",
+    )
+
+    fun supertonicDirectory(context: Context): File = File(context.filesDir, SUPERTONIC_DIRECTORY)
+
+    fun hasSupertonic(context: Context): Boolean = isValidSupertonicDirectory(supertonicDirectory(context))
+
+    fun isValidSupertonicDirectory(directory: File): Boolean =
+        directory.isDirectory && supertonicFiles.all { File(directory, it).isFile && File(directory, it).length() > 0L }
+
+    /** Imports only the seven fixed Supertonic model files from the official tar.bz2. */
+    fun importSupertonicArchive(context: Context, uri: Uri): File {
+        val target = supertonicDirectory(context)
+        val staging = File(context.filesDir, "$SUPERTONIC_DIRECTORY-import")
+        staging.deleteRecursively()
+        check(staging.mkdirs()) { "Cannot create Supertonic import directory" }
+        try {
+            var totalBytes = 0L
+            context.contentResolver.openInputStream(uri).use { raw ->
+                checkNotNull(raw) { "Cannot open Supertonic archive" }
+                TarArchiveInputStream(BZip2CompressorInputStream(raw.buffered())).use { tar ->
+                    while (true) {
+                        val entry = tar.nextTarEntry ?: break
+                        val parts = entry.name.trimEnd('/').split('/')
+                        require(parts.firstOrNull() == SUPERTONIC_ARCHIVE_ROOT) { "Unexpected Supertonic archive" }
+                        if (entry.isDirectory) continue
+                        if (entry.isFile && parts.size == 2 && parts[1] in setOf("LICENSE", "README.md")) continue
+                        require(entry.isFile && parts.size == 2 && parts[1] in supertonicFiles) {
+                            "Unexpected Supertonic archive entry: ${entry.name}"
+                        }
+                        require(entry.size in 1..MAX_SUPERTONIC_UNPACKED_BYTES) { "Invalid Supertonic file size" }
+                        val output = File(staging, parts[1])
+                        require(!output.exists()) { "Duplicate Supertonic file" }
+                        FileOutputStream(output).use { file ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            while (true) {
+                                val read = tar.read(buffer)
+                                if (read < 0) break
+                                totalBytes += read
+                                require(totalBytes <= MAX_SUPERTONIC_UNPACKED_BYTES) { "Supertonic archive is too large" }
+                                file.write(buffer, 0, read)
+                            }
+                        }
+                    }
+                }
+            }
+            require(isValidSupertonicDirectory(staging)) { "Supertonic archive is incomplete" }
+            SupertonicTts.release()
+            val backup = File(context.filesDir, "$SUPERTONIC_DIRECTORY-backup")
+            backup.deleteRecursively()
+            if (target.exists()) check(target.renameTo(backup)) { "Cannot replace Supertonic model" }
+            if (!staging.renameTo(target)) {
+                if (backup.exists()) backup.renameTo(target)
+                error("Cannot finish Supertonic import")
+            }
+            backup.deleteRecursively()
+            return target
+        } finally {
+            if (staging.exists()) staging.deleteRecursively()
+        }
+    }
 
     fun voskDirectory(context: Context): File = File(context.filesDir, VOSK_DIRECTORY)
 

@@ -54,7 +54,7 @@ import com.fersaiyan.cyanbridge.data.local.entity.VaultLockStateEntity
         MigrationStateEntity::class,
         // memory_chunks_fts is an FTS5 virtual table created via SQL (no Room entity).
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -407,6 +407,11 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE notes ADD COLUMN taggedContentHash TEXT")
                 db.execSQL("ALTER TABLE notes ADD COLUMN taggingModelVersion TEXT")
                 db.execSQL("ALTER TABLE notes ADD COLUMN taggedAt INTEGER")
+            }
+        }
+        val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE messages ADD COLUMN imageAttachmentName TEXT")
             }
         }
     }

@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.shared.ui.chat
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -62,6 +63,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.fersaiyan.cyanbridge.shared.chat.ChatAttachmentsUiState
 import com.fersaiyan.cyanbridge.shared.chat.ChatComposerPrimaryAction
 import com.fersaiyan.cyanbridge.shared.chat.ChatComposerUiState
@@ -121,6 +123,7 @@ fun ChatThreadScreen(
     onRecordAudio: () -> Unit,
     onClearAttachments: () -> Unit,
     onDestinationSelected: (AppDestination) -> Unit,
+    loadPrivatePhoto: suspend (String) -> ImageBitmap? = { null },
 ) {
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
@@ -191,6 +194,7 @@ fun ChatThreadScreen(
                 dailyReviewQueueStatus = dailyReviewQueueStatus,
             )
             ChatTimeline(
+                loadPrivatePhoto = loadPrivatePhoto,
                 messages = messages,
                 wallpaper = wallpaper,
                 userBubbleColor = userBubbleColor,
@@ -266,6 +270,7 @@ private fun StatusSurface(label: String) {
 @Composable
 private fun ChatTimeline(
     messages: List<ChatMessage>,
+    loadPrivatePhoto: suspend (String) -> ImageBitmap?,
     wallpaper: ImageBitmap?,
     userBubbleColor: Int?,
     assistantBubbleColor: Int?,
@@ -322,6 +327,7 @@ private fun ChatTimeline(
                         message = message,
                         userBubbleColor = userBubbleColor,
                         assistantBubbleColor = assistantBubbleColor,
+                        loadPrivatePhoto = loadPrivatePhoto,
                     )
                 }
                 if (isThinking) {
@@ -372,7 +378,15 @@ private fun ChatMessageBubble(
     message: ChatMessage,
     userBubbleColor: Int?,
     assistantBubbleColor: Int?,
+    loadPrivatePhoto: suspend (String) -> ImageBitmap?,
 ) {
+    var photo by remember(message.imageAttachmentName) { mutableStateOf<ImageBitmap?>(null) }
+    var photoLoaded by remember(message.imageAttachmentName) { mutableStateOf(false) }
+    var expanded by remember(message.id) { mutableStateOf(false) }
+    LaunchedEffect(message.imageAttachmentName) {
+        photo = message.imageAttachmentName?.let { loadPrivatePhoto(it) }
+        photoLoaded = true
+    }
     val isUser = message.role == ChatRole.USER
     val hasCustomColor = if (isUser) userBubbleColor != null else assistantBubbleColor != null
     val background = when {
@@ -407,12 +421,33 @@ private fun ChatMessageBubble(
                 contentColor = contentColor,
                 shape = shape,
             ) {
-                ChatRichText(
-                    markdown = message.content,
-                    color = contentColor,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                )
+                Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+                    if (message.imageAttachmentName != null) {
+                        if (photo != null) {
+                            Image(
+                                bitmap = photo!!,
+                                contentDescription = "BV300 photo. Tap to expand",
+                                modifier = Modifier.fillMaxWidth().height(180.dp).clickable { expanded = true },
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else if (photoLoaded) {
+                            Text("Photo unavailable", color = contentColor)
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    ChatRichText(markdown = message.content, color = contentColor)
+                }
             }
+        }
+    }
+    if (expanded && photo != null) {
+        Dialog(onDismissRequest = { expanded = false }) {
+            Image(
+                bitmap = photo!!,
+                contentDescription = "BV300 photo",
+                modifier = Modifier.fillMaxWidth().clickable { expanded = false },
+                contentScale = ContentScale.Fit,
+            )
         }
     }
 }

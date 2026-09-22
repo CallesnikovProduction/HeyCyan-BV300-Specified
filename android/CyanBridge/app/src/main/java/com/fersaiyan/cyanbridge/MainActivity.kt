@@ -110,8 +110,13 @@ import com.fersaiyan.cyanbridge.devices.meizumyvu.MeizuMyvuFailure
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungAiDialogueAudio
 import com.fersaiyan.cyanbridge.localai.LocalAiOrchestrator
+import com.fersaiyan.cyanbridge.localai.SupertonicTts
 import com.fersaiyan.cyanbridge.localai.LocalAiPhase
 import com.fersaiyan.cyanbridge.localai.LocalAiRuntime
+import com.fersaiyan.cyanbridge.localai.bv300TurnOwnership
+import com.fersaiyan.cyanbridge.localai.Bv300StreamingPipeline
+import com.fersaiyan.cyanbridge.localai.Bv300StreamingTimings
+import com.fersaiyan.cyanbridge.localai.fadeOutBv300Playback
 import com.fersaiyan.cyanbridge.localai.stt.VoskRussianSpeechRecognizer
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungWifiCredentials
 import com.fersaiyan.cyanbridge.devices.tunebuds.TuneBudsManager
@@ -191,6 +196,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.coroutineContext
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 import android.provider.Settings
 import android.net.Uri
@@ -243,6 +249,7 @@ import com.fersaiyan.cyanbridge.ai.image.ImageQuestionSource
 import com.fersaiyan.cyanbridge.ai.image.ImageQuestionSourcePolicy
 import com.fersaiyan.cyanbridge.ai.image.ImageThumbnailQuality
 import com.fersaiyan.cyanbridge.ai.AiQuestionForegroundService
+import com.fersaiyan.cyanbridge.localai.Bv300BackgroundAssistantService
 import com.fersaiyan.cyanbridge.ai.image.HighQualityFailureChoice
 import com.fersaiyan.cyanbridge.shared.glasses.GlassesAssistantMode
 import com.fersaiyan.cyanbridge.shared.glasses.AiWakeWordRoute
@@ -354,6 +361,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private fun speakMoyoungReply(
         text: String,
         languageTag: String = ImageQuestionPreferences.get(this).appLanguageTag,
+        offlineOnly: Boolean = false,
         onDone: (() -> Unit)? = null,
     ) {
         val outputDevice = findMoyoungAudioOutput()
@@ -362,6 +370,30 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Log.e("MoyoungW620", "BV300 audio output is unavailable; refusing fallback audio route")
             Toast.makeText(this, "BV300 audio output is not connected", Toast.LENGTH_LONG).show()
             onDone?.invoke()
+            return
+        }
+
+        if (offlineOnly) {
+            val outputFile = File(cacheDir, "bv300_supertonic_${System.nanoTime()}.wav")
+            AudioSessionCoordinator.markBusy()
+            AssistantRuntime.update { recordTts("Supertonic 3 · synthesizing locally") }
+            lifecycleScope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching { SupertonicTts.synthesize(this@MainActivity, text, outputFile) }
+                }
+                result.fold(
+                    onSuccess = {
+                        playMoyoungAudioFile(outputFile, outputDevice, "local assistant reply", onDone)
+                    },
+                    onFailure = { error ->
+                        Log.e("MoyoungW620", "Supertonic TTS failed", error)
+                        AssistantRuntime.update { recordTts("Failure · Supertonic 3: ${error.message}") }
+                        outputFile.delete()
+                        AudioSessionCoordinator.markIdle()
+                        onDone?.invoke()
+                    },
+                )
+            }
             return
         }
 
@@ -750,13 +782,17 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     private var moyoungW620AssistantJob: Job? = null
     private var moyoungW620ListeningJob: Job? = null
     private var moyoungW620SpeechJob: Job? = null
+    private var moyoungBackgroundOwnershipJob: Job? = null
     private var localAiTurnJob: Job? = null
+    @Volatile private var localAiVoiceToken: Any? = null
+    @Volatile private var localAiTurnRequestId: String? = null
+    private var localAiPlaybackRequestId: String? = null
     private val localAiOrchestrator by lazy {
         LocalAiOrchestrator(
             context = this,
             stt = VoskRussianSpeechRecognizer(this),
-            captureFreshPhoto = { startedAtMs ->
-                getOrCreateMoyoungW620Manager().captureFreshAiPhoto(startedAtMs)
+            captureFreshPhoto = { requestId, startedAtMs ->
+                getOrCreateMoyoungW620Manager().captureFreshAiPhoto(requestId, startedAtMs)
             },
         )
     }
@@ -933,10 +969,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     override fun onDestroy() {
         cancelLocalStreamingSpeech("activity destroyed")
+        localAiTurnJob?.cancel(CancellationException("BV300 Activity destroyed"))
         bv300MediaSession?.release()
         bv300MediaSession = null
         moyoungReplyPlayer?.release()
         moyoungReplyPlayer = null
+        if (localAiPlaybackRequestId != null) AudioSessionCoordinator.markIdle()
+        localAiPlaybackRequestId = null
         val voiceQueryWasActive = voiceQueryInProgress.getAndSet(null) != null
         activeVoiceRecognizer.getAndSet(null)?.let { recognizer ->
             runCatching { recognizer.destroy() }
@@ -1483,19 +1522,57 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (moyoungW620AssistantJob == null) {
                 moyoungW620AssistantJob = lifecycleScope.launch {
                     manager.aiDialogueAudio.collect { audio ->
-                        if (isMoyoungW620Selected()) {
+                        if (isMoyoungW620Selected() && !Bv300BackgroundAssistantService.isRunning.value) {
                             handleMoyoungAiDialogueAudio(audio)
+                        }
+                    }
+                }
+            }
+            if (moyoungBackgroundOwnershipJob == null) {
+                moyoungBackgroundOwnershipJob = lifecycleScope.launch {
+                    Bv300BackgroundAssistantService.isRunning.collect { running ->
+                        if (running && localAiTurnJob?.isActive == true) {
+                            localAiTurnJob?.cancel(CancellationException("BV300 foreground service took ownership"))
+                            moyoungReplyPlayer?.release()
+                            moyoungReplyPlayer = null
+                            localAiPlaybackRequestId = null
+                            AudioSessionCoordinator.markIdle()
+                            localAiVoiceToken?.let { oldToken ->
+                                if (voiceQueryInProgress.compareAndSet(oldToken, null)) finishAiQuestionForegroundWork()
+                            }
+                            localAiVoiceToken = null
                         }
                     }
                 }
             }
             if (moyoungW620ListeningJob == null) {
                 moyoungW620ListeningJob = lifecycleScope.launch {
-                    manager.aiDialogueListening.collect { listening ->
-                        if (listening && isMoyoungW620Selected()) {
-                            LocalAiRuntime.update {
-                                it.copy(phase = LocalAiPhase.LISTENING, partialTranscript = "", transcript = "", error = null)
+                    manager.aiDialogueStarted.collect { event ->
+                        if (isMoyoungW620Selected() && !Bv300BackgroundAssistantService.isRunning.value) {
+                            val requestId = event.requestId
+                            val previous = event.preemptedRequestId
+                            if (previous != null) {
+                                val preemptedLocalTurn = localAiTurnRequestId == previous
+                                val oldTurn = localAiTurnJob.takeIf { preemptedLocalTurn }
+                                if (preemptedLocalTurn) {
+                                    localAiVoiceToken?.let { oldToken ->
+                                        if (voiceQueryInProgress.compareAndSet(oldToken, null)) finishAiQuestionForegroundWork()
+                                    }
+                                    localAiVoiceToken = null
+                                }
+                                if (preemptedLocalTurn) lifecycleScope.launch(Dispatchers.IO) {
+                                    LocalModelsProvider().cancelGeneration()
+                                }
+                                if (localAiPlaybackRequestId == previous) {
+                                    moyoungReplyPlayer?.let { fadeOutBv300Playback(it) }
+                                    moyoungReplyPlayer?.release()
+                                    moyoungReplyPlayer = null
+                                    localAiPlaybackRequestId = null
+                                    AudioSessionCoordinator.markIdle()
+                                }
+                                oldTurn?.cancel(CancellationException("BV300 button preempted $previous"))
                             }
+                            Log.i("BV300LocalAI", "Listening requestId=$requestId preempted=${previous != null}")
                         }
                     }
                 }
@@ -1503,8 +1580,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             if (moyoungW620SpeechJob == null) {
                 moyoungW620SpeechJob = lifecycleScope.launch {
                     manager.aiSpeechDetected.collect { detected ->
-                        if (detected && isMoyoungW620Selected()) {
-                            LocalAiRuntime.update { it.copy(phase = LocalAiPhase.SPEECH_DETECTED) }
+                        if (detected && isMoyoungW620Selected() && !Bv300BackgroundAssistantService.isRunning.value) {
+                            manager.activeDialogueRequestId?.let { requestId ->
+                                bv300TurnOwnership.updateIfCurrent(requestId) {
+                                    it.copy(phase = LocalAiPhase.SPEECH_DETECTED)
+                                }
+                            }
                         }
                     }
                 }
@@ -6087,12 +6168,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun handleMoyoungAiDialogueAudio(audio: MoyoungAiDialogueAudio) {
         val manager = getOrCreateMoyoungW620Manager()
+        val requestId = audio.requestId
+        if (!bv300TurnOwnership.isCurrent(requestId)) return
         if (!manager.isConnected()) {
-            LocalAiRuntime.update { it.copy(phase = LocalAiPhase.ERROR, error = "BV300 disconnected") }
-            return
-        }
-        if (localAiTurnJob?.isActive == true) {
-            Log.i("BV300LocalAI", "Ignoring duplicate assistant audio while a turn is active")
+            bv300TurnOwnership.updateIfCurrent(requestId) {
+                it.copy(phase = LocalAiPhase.ERROR, error = "BV300 disconnected")
+            }
             return
         }
         val token = Any()
@@ -6100,10 +6181,13 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             Log.i("BV300LocalAI", "Ignoring assistant audio while another voice request is active")
             return
         }
+        localAiVoiceToken = token
+        localAiTurnRequestId = requestId
 
         prepareAiQuestionForLockScreen()
         beginAiQuestionForegroundWork("Processing BV300 local assistant request")
         localAiTurnJob = lifecycleScope.launch(Dispatchers.IO) {
+            val timings = Bv300StreamingTimings(requestId, audio.startedAtElapsedNanos)
             try {
                 logMoyoungPcm16Stats(audio.pcm16, audio.sampleRateHz)
                 val prepared = Bv300AudioPreprocessor.prepare(
@@ -6111,29 +6195,117 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     sampleRateHz = audio.sampleRateHz,
                     compactSilence = false,
                 )
-                val reply = localAiOrchestrator.process(prepared.bytes, audio.sampleRateHz)
-                withContext(Dispatchers.Main) {
-                    speakMoyoungReply(reply, languageTag = "ru-RU") {
-                        if (AssistantRuntime.snapshot.value.lastTts.startsWith("Failure")) {
-                            LocalAiRuntime.update { it.copy(phase = LocalAiPhase.ERROR, error = "BV300 TTS playback failed") }
-                        } else {
-                            LocalAiRuntime.reset()
+                val result = Bv300StreamingPipeline(
+                    requestId = requestId,
+                    ownership = bv300TurnOwnership,
+                    synthesize = { sentence ->
+                        bv300TurnOwnership.requireCurrent(requestId)
+                        bv300TurnOwnership.updateIfCurrent(requestId) {
+                            it.copy(phase = LocalAiPhase.SPEAKING, ttsSynthesizing = true)
                         }
-                        if (voiceQueryInProgress.compareAndSet(token, null)) finishAiQuestionForegroundWork()
+                        timings.synthesisStarted()
+                        val file = File(cacheDir, "bv300_${requestId}_${sentence.index}.wav")
+                        try {
+                            withContext(Dispatchers.IO) { SupertonicTts.synthesize(this@MainActivity, sentence.text, file) }
+                            bv300TurnOwnership.requireCurrent(requestId)
+                            file
+                        } catch (error: Throwable) {
+                            file.delete()
+                            throw error
+                        } finally {
+                            bv300TurnOwnership.updateIfCurrent(requestId) { it.copy(ttsSynthesizing = false) }
+                        }
+                    },
+                    play = { chunk -> playLocalBv300AudioFile(chunk.file, requestId, timings) },
+                    onSpeechError = { error -> Log.e("BV300LocalAI", "Streaming speech chunk failed", error) },
+                ).run { emit -> localAiOrchestrator.process(prepared.bytes, audio.sampleRateHz, requestId, timings, emit) }
+                bv300TurnOwnership.requireCurrent(requestId)
+                timings.finalAudioFinished()
+                if (result.speechFailures == 0) {
+                    bv300TurnOwnership.finish(requestId, resetState = true)
+                } else {
+                    bv300TurnOwnership.updateIfCurrent(requestId) {
+                        it.copy(phase = LocalAiPhase.ERROR, error = "Some BV300 speech chunks could not be played")
                     }
                 }
             } catch (cancelled: CancellationException) {
-                if (voiceQueryInProgress.compareAndSet(token, null)) finishAiQuestionForegroundWork()
                 throw cancelled
             } catch (error: Throwable) {
                 Log.e("BV300LocalAI", "Local assistant turn failed", error)
-                LocalAiRuntime.update { it.copy(phase = LocalAiPhase.ERROR, error = error.message ?: "Local assistant failed") }
-                withContext(Dispatchers.Main) {
-                    speakMoyoungReply("Локальный ассистент не смог ответить. Проверьте модели в чате.", languageTag = "ru-RU") {
-                        if (voiceQueryInProgress.compareAndSet(token, null)) finishAiQuestionForegroundWork()
+                bv300TurnOwnership.updateIfCurrent(requestId) {
+                    it.copy(phase = LocalAiPhase.ERROR, error = error.message ?: "Local assistant failed")
+                }
+                if (bv300TurnOwnership.isCurrent(requestId)) {
+                    runCatching { speakLocalBv300Turn("Локальный ассистент не смог ответить. Проверьте модели в чате.", requestId) }
+                }
+            } finally {
+                if (voiceQueryInProgress.compareAndSet(token, null)) finishAiQuestionForegroundWork()
+                if (localAiVoiceToken === token) localAiVoiceToken = null
+                if (localAiTurnRequestId == requestId) localAiTurnRequestId = null
+                bv300TurnOwnership.finish(requestId)
+            }
+        }
+    }
+
+    private suspend fun speakLocalBv300Turn(text: String, requestId: String) {
+        val file = File(cacheDir, "bv300_turn_${requestId}.wav")
+        try {
+            withContext(Dispatchers.IO) { SupertonicTts.synthesize(this@MainActivity, text, file) }
+            playLocalBv300AudioFile(file, requestId)
+        } finally {
+            file.delete()
+        }
+    }
+
+    private suspend fun playLocalBv300AudioFile(file: File, requestId: String, timings: Bv300StreamingTimings? = null) {
+        val output = withContext(Dispatchers.Main) { findMoyoungAudioOutput() }
+            ?: error("BV300 audio output is unavailable")
+        coroutineContext.ensureActive()
+        bv300TurnOwnership.requireCurrent(requestId)
+        try {
+            withContext(Dispatchers.Main) {
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    val playback = android.media.MediaPlayer()
+                    moyoungReplyPlayer = playback
+                    localAiPlaybackRequestId = requestId
+                    AudioSessionCoordinator.markBusy()
+                    fun finish(error: Throwable? = null) {
+                        if (moyoungReplyPlayer === playback) {
+                            moyoungReplyPlayer = null
+                            localAiPlaybackRequestId = null
+                            AudioSessionCoordinator.markIdle()
+                        }
+                        runCatching { playback.release() }
+                        if (continuation.isActive) {
+                            if (error == null) continuation.resume(Unit) else continuation.resumeWithException(error)
+                        }
+                    }
+                    try {
+                        playback.setAudioAttributes(android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                        playback.setDataSource(file.absolutePath)
+                        check(playback.setPreferredDevice(output)) { "BV300 audio route rejected" }
+                        playback.setOnCompletionListener { finish() }
+                        playback.setOnErrorListener { _, _, _ ->
+                            finish(IllegalStateException("BV300 playback failed"))
+                            true
+                        }
+                        playback.prepare()
+                        bv300TurnOwnership.requireCurrent(requestId)
+                        playback.start()
+                        timings?.firstAudio()
+                        bv300TurnOwnership.updateIfCurrent(requestId) { it.copy(audioPlaying = true) }
+                    } catch (error: Throwable) {
+                        finish(error)
+                    }
+                    continuation.invokeOnCancellation {
+                        runOnUiThread { finish() }
                     }
                 }
             }
+        } finally {
+            bv300TurnOwnership.updateIfCurrent(requestId) { it.copy(audioPlaying = false) }
         }
     }
     private fun logMoyoungPcm16Stats(pcm16: ByteArray, sampleRateHz: Int) {

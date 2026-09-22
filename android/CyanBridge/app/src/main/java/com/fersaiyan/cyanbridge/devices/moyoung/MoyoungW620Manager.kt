@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.fersaiyan.cyanbridge.localai.audio.VoiceActivityDetector
 import com.fersaiyan.cyanbridge.localai.model.FreshPhotoGuard
+import com.fersaiyan.cyanbridge.localai.bv300TurnOwnership
 import com.moyoung.glasses.CRPBleClient
 import com.moyoung.glasses.conn.CRPBleConnection
 import com.moyoung.glasses.conn.CRPBleDevice
@@ -35,6 +36,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.util.UUID
 
 data class MoyoungW620State(
     val connectionLabel: String = "MoYoung / W620 disconnected",
@@ -56,8 +58,15 @@ data class MoyoungWifiCredentials(
 
 data class MoyoungAiDialogueAudio(
     val pcm16: ByteArray,
+    val requestId: String,
     val sampleRateHz: Int = 16_000,
     val cancelledByGlasses: Boolean = false,
+    val startedAtElapsedNanos: Long = 0L,
+)
+
+data class MoyoungAiDialogueStart(
+    val requestId: String,
+    val preemptedRequestId: String?,
 )
 
 /** Thin adapter around the published MoYoung Android SDK. */
@@ -88,6 +97,7 @@ class MoyoungW620Manager private constructor(context: Context) {
     private val wifiStateEvents = MutableSharedFlow<WifiStateEvent>(extraBufferCapacity = 8)
     private val wifiConnectionEvents = MutableSharedFlow<Boolean>(extraBufferCapacity = 8)
     private val _aiDialogueAudio = MutableSharedFlow<MoyoungAiDialogueAudio>(extraBufferCapacity = 2)
+    private val _aiDialogueStarted = MutableSharedFlow<MoyoungAiDialogueStart>(extraBufferCapacity = 2)
     private val _state = MutableStateFlow(MoyoungW620State())
     private val _aiDialogueListening = MutableStateFlow(false)
     private val _aiSpeechDetected = MutableStateFlow(false)
@@ -100,12 +110,27 @@ class MoyoungW620Manager private constructor(context: Context) {
     private var aiDialogueAudioFrames: Long = 0L
     private var aiVoiceActivityDetector = VoiceActivityDetector()
     private var aiAutoStopSent = false
-    @Volatile private var pendingAiPhoto: CompletableDeferred<File>? = null
+    private var dialogueRequestId: String? = null
+    private var dialogueStartedAtElapsedNanos: Long = 0L
+    private data class PendingAiPhoto(
+        val requestId: String,
+        val connectionId: String,
+        val image: CompletableDeferred<File> = CompletableDeferred(),
+        val drained: CompletableDeferred<Unit> = CompletableDeferred(),
+        var abandoned: Boolean = false,
+    )
+    private val pendingAiPhotoLock = Any()
+    private var pendingAiPhoto: PendingAiPhoto? = null
+    @Volatile var connectionSessionId: String? = null
+        private set
 
     val state: StateFlow<MoyoungW620State> = _state.asStateFlow()
     val aiDialogueAudio: SharedFlow<MoyoungAiDialogueAudio> = _aiDialogueAudio.asSharedFlow()
+    val aiDialogueStarted: SharedFlow<MoyoungAiDialogueStart> = _aiDialogueStarted.asSharedFlow()
     val aiDialogueListening: StateFlow<Boolean> = _aiDialogueListening.asStateFlow()
     val aiSpeechDetected: StateFlow<Boolean> = _aiSpeechDetected.asStateFlow()
+    val activeDialogueRequestId: String?
+        get() = synchronized(aiDialogueAudioLock) { dialogueRequestId }
 
     @Synchronized
     fun connect(address: String, deviceName: String? = null) {
@@ -145,10 +170,16 @@ class MoyoungW620Manager private constructor(context: Context) {
     }
 
     fun disconnect() {
+        connectionSessionId = null
+        bv300TurnOwnership.clear(resetState = true)
         _aiDialogueListening.value = false
         _aiSpeechDetected.value = false
-        pendingAiPhoto?.cancel()
-        pendingAiPhoto = null
+        synchronized(aiDialogueAudioLock) { dialogueRequestId = null }
+        synchronized(pendingAiPhotoLock) {
+            pendingAiPhoto?.image?.cancel()
+            pendingAiPhoto?.drained?.cancel()
+            pendingAiPhoto = null
+        }
         runCatching { connection?.disableWifi() }
         runCatching { device?.disconnect() }
         device = null
@@ -176,23 +207,47 @@ class MoyoungW620Manager private constructor(context: Context) {
         connectedOrNull()?.queryNewMediaFile()
     }
 
-    suspend fun captureFreshAiPhoto(requestStartedAtMs: Long): File = photoMutex.withLock {
+    suspend fun captureFreshAiPhoto(requestId: String, requestStartedAtMs: Long): File = photoMutex.withLock {
+        require(requestId.isNotBlank() && requestId.all { it.isLetterOrDigit() || it == '-' })
         val activeConnection = connectedOrNull() ?: throw IOException("BV300 disconnected before photo capture")
-        val pending = CompletableDeferred<File>()
-        pendingAiPhoto = pending
+        val previousDrain = synchronized(pendingAiPhotoLock) {
+            pendingAiPhoto?.takeIf { it.abandoned }?.drained
+        }
+        previousDrain?.let { withTimeout(30_000L) { it.await() } }
+        val pending = synchronized(pendingAiPhotoLock) {
+            check(pendingAiPhoto == null) {
+                "Previous BV300 photo is still pending; reconnect the glasses before another visual request"
+            }
+            PendingAiPhoto(requestId, connectionSessionId ?: error("BV300 has no connection session")).also {
+                pendingAiPhoto = it
+            }
+        }
+        var receivedImage = false
         try {
             activeConnection.takePhoto(TakePhoto.PhotoMode.ModeAIRecognition)
-            val source = withTimeout(30_000L) { pending.await() }
+            val source = withTimeout(30_000L) { pending.image.await() }
+            receivedImage = true
+            check(connectionSessionId == pending.connectionId) { "BV300 reconnected during photo capture" }
             check(FreshPhotoGuard.isFresh(source, requestStartedAtMs)) {
                 "BV300 camera returned a stale or empty image"
             }
             val destinationDirectory = File(appContext.filesDir, "local_ai_photos")
             check(destinationDirectory.mkdirs() || destinationDirectory.isDirectory)
-            val destination = File(destinationDirectory, "bv300_${requestStartedAtMs}.jpg")
+            val destination = File(destinationDirectory, "bv300_${requestId}.jpg")
             source.copyTo(destination, overwrite = false)
             destination
         } finally {
-            if (pendingAiPhoto === pending) pendingAiPhoto = null
+            synchronized(pendingAiPhotoLock) {
+                if (pendingAiPhoto === pending) {
+                    // A timed-out/cancelled SDK command may still deliver its image. Keep a tombstone
+                    // until that callback is drained, so the next request can never consume it.
+                    if (receivedImage || (pending.image.isCompleted && !pending.image.isCancelled)) {
+                        pendingAiPhoto = null
+                    } else {
+                        pending.abandoned = true
+                    }
+                }
+            }
         }
     }
 
@@ -267,9 +322,16 @@ class MoyoungW620Manager private constructor(context: Context) {
                     )
                 }
                 else -> {
+                    connectionSessionId = null
+                    bv300TurnOwnership.clear(resetState = true)
                     _aiDialogueListening.value = false
                     _aiSpeechDetected.value = false
-                    pendingAiPhoto?.cancel()
+                    synchronized(aiDialogueAudioLock) { dialogueRequestId = null }
+                    synchronized(pendingAiPhotoLock) {
+                        pendingAiPhoto?.image?.cancel()
+                        pendingAiPhoto?.drained?.cancel()
+                        pendingAiPhoto = null
+                    }
                     _state.value = _state.value.copy(
                         connectionLabel = "MoYoung / W620 disconnected",
                         protocolState = "DISCONNECTED",
@@ -296,15 +358,20 @@ class MoyoungW620Manager private constructor(context: Context) {
         }
         activeConnection.setAiDialogueListener(object : CRPAiDialogueListener {
             override fun onDialogueStart() {
+                val requestId = UUID.randomUUID().toString()
                 _aiDialogueListening.value = true
                 _aiSpeechDetected.value = false
                 synchronized(aiDialogueAudioLock) {
+                    dialogueRequestId = requestId
+                    dialogueStartedAtElapsedNanos = android.os.SystemClock.elapsedRealtimeNanos()
                     aiDialogueAudioBuffer = ByteArrayOutputStream()
                     aiDialogueAudioBytes = 0L
                     aiDialogueAudioFrames = 0L
                     aiVoiceActivityDetector = VoiceActivityDetector()
                     aiAutoStopSent = false
                 }
+                val previous = bv300TurnOwnership.begin(requestId)
+                _aiDialogueStarted.tryEmit(MoyoungAiDialogueStart(requestId, previous))
                 Log.i(TAG, "AI dialogue started from glasses")
             }
 
@@ -337,8 +404,16 @@ class MoyoungW620Manager private constructor(context: Context) {
                     TAG,
                     "AI dialogue image path=${image?.absolutePath.orEmpty()} exists=${image?.isFile == true}",
                 )
-                if (image != null && pendingAiPhoto?.isCompleted == false) {
-                    pendingAiPhoto?.complete(image)
+                if (image != null) synchronized(pendingAiPhotoLock) {
+                    pendingAiPhoto?.let { pending ->
+                        if (pending.abandoned) {
+                            Log.i(TAG, "Discarding late photo for cancelled request=${pending.requestId}")
+                            pendingAiPhoto = null
+                            pending.drained.complete(Unit)
+                        } else if (!pending.image.isCompleted) {
+                            pending.image.complete(image)
+                        }
+                    }
                 }
             }
 
@@ -348,7 +423,10 @@ class MoyoungW620Manager private constructor(context: Context) {
                 val completed = synchronized(aiDialogueAudioLock) {
                     val audio = aiDialogueAudioBuffer.toByteArray()
                     aiDialogueAudioBuffer = ByteArrayOutputStream()
-                    audio
+                    val requestId = dialogueRequestId
+                    val startedAt = dialogueStartedAtElapsedNanos
+                    dialogueRequestId = null
+                    Triple(requestId, audio, startedAt)
                 }
                 Log.i(
                     TAG,
@@ -357,11 +435,13 @@ class MoyoungW620Manager private constructor(context: Context) {
                 )
                 // The glasses also use AudioCancel for their 30-second capture timeout. The
                 // decoded PCM received before that signal is still a valid user utterance.
-                if (completed.isNotEmpty()) {
+                if (completed.first != null && completed.second.isNotEmpty()) {
                     _aiDialogueAudio.tryEmit(
                         MoyoungAiDialogueAudio(
-                            pcm16 = completed,
+                            pcm16 = completed.second,
+                            requestId = requireNotNull(completed.first),
                             cancelledByGlasses = cancelled,
+                            startedAtElapsedNanos = completed.third,
                         ),
                     )
                 }
@@ -400,6 +480,9 @@ class MoyoungW620Manager private constructor(context: Context) {
     }
 
     private fun onConnected(activeConnection: CRPBleConnection) {
+        if (_state.value.protocolState != "CONNECTED" || connectionSessionId == null) {
+            connectionSessionId = UUID.randomUUID().toString()
+        }
         _state.value = _state.value.copy(
             connectionLabel = "MoYoung / W620 connected",
             protocolState = "CONNECTED",

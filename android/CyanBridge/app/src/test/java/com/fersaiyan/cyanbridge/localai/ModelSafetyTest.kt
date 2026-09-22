@@ -32,4 +32,14 @@ class ModelSafetyTest {
         photo.writeBytes(byteArrayOf())
         assertFalse(FreshPhotoGuard.isFresh(photo, requestStart))
     }
+
+    @Test fun freshPhotoMustBelongToCurrentRequest() {
+        val photo = temporaryFolder.newFile("bv300_request-A.jpg")
+        photo.writeBytes(byteArrayOf(1, 2, 3))
+        val startedAt = System.currentTimeMillis() - 1_000
+        photo.setLastModified(startedAt + 1)
+        assertTrue(FreshPhotoGuard.isOwnedFresh(photo, "request-A", startedAt))
+        assertFalse(FreshPhotoGuard.isOwnedFresh(photo, "request-B", startedAt))
+        assertFalse(FreshPhotoGuard.isOwnedFresh(photo, "request-A", startedAt + 5_000))
+    }
 }

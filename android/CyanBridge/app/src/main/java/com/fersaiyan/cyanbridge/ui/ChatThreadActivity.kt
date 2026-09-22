@@ -82,6 +82,8 @@ import com.fersaiyan.cyanbridge.ui.debug.DebugLogSupport
 import com.fersaiyan.cyanbridge.ui.theme.CyanBridgeTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -230,6 +232,7 @@ class ChatThreadActivity : AppCompatActivity() {
                     onRecordAudio = ::toggleAudioRecording,
                     onClearAttachments = ::clearPendingAttachments,
                     onDestinationSelected = ::navigateTo,
+                    loadPrivatePhoto = ::loadPrivatePhoto,
                 )
                 if (chatAppearanceMenuVisible) {
                     ChatAppearanceMenuDialog(
@@ -255,6 +258,15 @@ class ChatThreadActivity : AppCompatActivity() {
                     refreshMessages()
                 }
                 previousPhase = snapshot.phase
+            }
+        }
+        lifecycleScope.launch {
+            ChatStore.messageChanges.collectLatest { change ->
+                if (change?.chatId == chatId) {
+                    // Coalesce fast model deltas so the visible bubble grows without a UI/Room read per token.
+                    delay(120)
+                    refreshMessages()
+                }
             }
         }
 
@@ -435,6 +447,18 @@ class ChatThreadActivity : AppCompatActivity() {
         }.getOrNull()?.asImageBitmap()
     }
 
+    private suspend fun loadPrivatePhoto(name: String): ImageBitmap? = withContext(Dispatchers.IO) {
+        if (name != File(name).name || !name.endsWith(".jpg")) return@withContext null
+        val file = File(File(filesDir, "local_ai_photos"), name)
+        if (!file.isFile) return@withContext null
+        runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.absolutePath, bounds)
+            val scale = maxOf(1, maxOf(bounds.outWidth, bounds.outHeight) / 1600)
+            BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = scale })?.asImageBitmap()
+        }.getOrNull()
+    }
+
     private fun showChatAppearanceMenu() {
         chatAppearanceMenuVisible = true
     }
@@ -518,6 +542,9 @@ class ChatThreadActivity : AppCompatActivity() {
                 refreshModelBadge("Ready")
                 updateComposerForGenerationState()
                 android.widget.Toast.makeText(this, "Using ${picked.displayName}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("Local Models & TTS") { _, _ ->
+                startActivity(Intent(this, LocalModelsConfigureActivity::class.java))
             }
             .setNegativeButton("Cancel", null)
             .show()

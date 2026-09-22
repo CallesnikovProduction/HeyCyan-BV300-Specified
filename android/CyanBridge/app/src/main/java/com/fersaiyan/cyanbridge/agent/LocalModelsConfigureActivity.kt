@@ -5,6 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.util.Log
 import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -21,6 +26,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
 import com.fersaiyan.cyanbridge.localai.model.LocalModelManager
+import com.fersaiyan.cyanbridge.localai.SupertonicTts
+import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceSnapshot
@@ -70,6 +77,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
     private var downloadReceiver: BroadcastReceiver? = null
     private var downloadState = LocalModelDownloadUiState()
     private var hasUnsavedChanges = false
+    private var ttsTestPlayer: MediaPlayer? = null
 
     private var generationDraft = GenerationDraft()
     private var remoteDraft = RemoteDraft()
@@ -89,6 +97,12 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) importVosk(uri)
+    }
+
+    private val importSupertonicLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) importSupertonic(uri)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -123,6 +137,8 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        ttsTestPlayer?.release()
+        ttsTestPlayer = null
         super.onDestroy()
         downloadReceiver?.let { runCatching { unregisterReceiver(it) } }
         downloadReceiver = null
@@ -135,6 +151,9 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
             LocalModelsAction.Refresh -> refreshAllUi(loadDrafts = !hasUnsavedChanges)
             LocalModelsAction.ImportModel -> importModelLauncher.launch(arrayOf("application/octet-stream", "*/*"))
             LocalModelsAction.ImportVosk -> importVoskLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+            LocalModelsAction.ImportSupertonic -> importSupertonicLauncher.launch(arrayOf("application/x-bzip2", "application/octet-stream", "*/*"))
+            LocalModelsAction.TestSupertonic -> testSupertonic()
+            LocalModelsAction.TestSupertonicEnglish -> testSupertonic(english = true)
             is LocalModelsAction.SelectInstalledModel -> selectModel(action.id)
             LocalModelsAction.ShowSelectedModelInfo -> showSelectedModelInfo()
             LocalModelsAction.UnloadSelectedModel -> unloadSelectedModel()
@@ -203,6 +222,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
                 "${if (exists) "Ready" else "Missing file"} • ${humanSize(it.sizeBytes)}"
             } ?: "No model selected",
             voskStatus = if (LocalModelManager.hasVosk(this)) "Vosk Russian: ready" else "Vosk Russian: missing — import vosk-model-small-ru-0.22.zip",
+            supertonicStatus = if (LocalModelManager.hasSupertonic(this)) "Supertonic 3 TTS: ready" else "Supertonic 3 TTS: missing — import the .tar.bz2 from Documents/llms",
             emptyStateMessage = if (installedModels.isEmpty()) {
                 "No local model installed. Gemma 4 E2B is the recommended multimodal starter."
             } else "",
@@ -629,6 +649,90 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
             downloadState = result.fold(
                 onSuccess = { LocalModelDownloadUiState(message = "Vosk Russian model ready") },
                 onFailure = { LocalModelDownloadUiState(message = "Vosk import failed: ${it.message}") },
+            )
+            refreshComposeState()
+        }
+    }
+
+    private fun importSupertonic(uri: Uri) {
+        lifecycleScope.launch {
+            downloadState = LocalModelDownloadUiState(isInFlight = true, message = "Importing Supertonic 3 TTS…")
+            refreshComposeState()
+            val result = withContext(Dispatchers.IO) {
+                runCatching { LocalModelManager.importSupertonicArchive(this@LocalModelsConfigureActivity, uri) }
+            }
+            downloadState = result.fold(
+                onSuccess = { LocalModelDownloadUiState(message = "Supertonic 3 TTS ready") },
+                onFailure = { LocalModelDownloadUiState(message = "Supertonic import failed: ${it.message}") },
+            )
+            refreshComposeState()
+        }
+    }
+
+    private fun testSupertonic(english: Boolean = false) {
+        val address = DeviceProfileStore.loadLastSelected(this)?.macAddress.orEmpty()
+        val output = (getSystemService(AUDIO_SERVICE) as AudioManager)
+            .getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .firstOrNull { device ->
+                device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP &&
+                    (device.productName?.toString()?.equals("BV300", ignoreCase = true) == true ||
+                        (address.isNotEmpty() && device.address.equals(address, ignoreCase = true)))
+            }
+        if (output == null) {
+            downloadState = LocalModelDownloadUiState(message = "BV300 audio output is not connected")
+            refreshComposeState()
+            return
+        }
+        lifecycleScope.launch {
+            downloadState = LocalModelDownloadUiState(isInFlight = true, message = "Generating Russian speech locally…")
+            refreshComposeState()
+            val file = File(cacheDir, "supertonic_test_${System.nanoTime()}.wav")
+            val result = withContext(Dispatchers.IO) {
+                runCatching { SupertonicTts.synthesize(this@LocalModelsConfigureActivity,
+                    if (english) "Three plus five equals eight." else "Три плюс пять равно восемь.", file) }
+            }
+            result.fold(
+                onSuccess = {
+                    runCatching {
+                        ttsTestPlayer?.release()
+                        val player = MediaPlayer()
+                        ttsTestPlayer = player
+                        player.setAudioAttributes(AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                        player.setDataSource(file.absolutePath)
+                        check(player.setPreferredDevice(output)) { "BV300 audio route rejected" }
+                        player.setOnCompletionListener {
+                            it.release()
+                            if (ttsTestPlayer === it) ttsTestPlayer = null
+                            file.delete()
+                        }
+                        player.setOnErrorListener { mediaPlayer, _, _ ->
+                            mediaPlayer.release()
+                            if (ttsTestPlayer === mediaPlayer) ttsTestPlayer = null
+                            file.delete()
+                            true
+                        }
+                        player.prepare()
+                        player.start()
+                        player.routedDevice?.let { routed ->
+                            check(routed.id == output.id) { "Audio routed away from BV300: ${routed.productName}" }
+                        }
+                        Log.i("SupertonicTest", "Playback started preferred=${output.productName} actual=${player.routedDevice?.productName}")
+                    }.fold(
+                        onSuccess = { downloadState = LocalModelDownloadUiState(message = "Supertonic speech playing in BV300") },
+                        onFailure = { error ->
+                            ttsTestPlayer?.release()
+                            ttsTestPlayer = null
+                            file.delete()
+                            downloadState = LocalModelDownloadUiState(message = "TTS playback failed: ${error.message}")
+                        },
+                    )
+                },
+                onFailure = { error ->
+                    file.delete()
+                    downloadState = LocalModelDownloadUiState(message = "Supertonic synthesis failed: ${error.message}")
+                },
             )
             refreshComposeState()
         }
