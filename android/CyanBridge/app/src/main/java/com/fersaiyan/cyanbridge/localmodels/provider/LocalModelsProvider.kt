@@ -59,6 +59,21 @@ internal fun buildMultimodalPrompt(
     }
 }
 
+/** The exact text and image attachments forwarded together to the LiteRT request. */
+internal data class MultimodalModelRequest(
+    val prompt: String,
+    val imagePaths: List<String>,
+)
+
+internal fun buildMultimodalModelRequest(
+    configuredSystemPrompt: String,
+    messages: List<PromptMessage>,
+    imagePaths: List<String>,
+): MultimodalModelRequest = MultimodalModelRequest(
+    prompt = buildMultimodalPrompt(configuredSystemPrompt, messages),
+    imagePaths = imagePaths.toList(),
+)
+
 class LocalModelsProvider {
     companion object {
         const val STATUS_MAX_TOKENS_REACHED = "__MAX_TOKENS_REACHED__"
@@ -154,16 +169,18 @@ class LocalModelsProvider {
 
             // LiteRT accepts one prompt alongside image/audio attachments. Preserve system instructions
             // instead of dropping them when moving from the chat template to the media API.
-            val effectivePrompt = if (hasMediaAttachments) {
-                buildMultimodalPrompt(systemPrompt, chatMessages)
+            val multimodalRequest = if (hasMediaAttachments) {
+                buildMultimodalModelRequest(systemPrompt, chatMessages, imagePaths)
             } else {
-                // For text-only, use the full template-rendered prompt
-                PromptTemplateRegistry.renderPrompt(
-                    templateId = templateId,
-                    systemPrompt = systemPrompt,
-                    messages = chatMessages,
-                )
+                null
             }
+            // Text-only requests use the full template-rendered prompt.
+            val effectivePrompt = multimodalRequest?.prompt ?: PromptTemplateRegistry.renderPrompt(
+                templateId = templateId,
+                systemPrompt = systemPrompt,
+                messages = chatMessages,
+            )
+            val effectiveImagePaths = multimodalRequest?.imagePaths ?: imagePaths
 
             onStatus?.invoke("Loading ${selected.displayName}...")
             val loadDetails = LocalChatSessionManager.ensureModelLoaded(
@@ -185,7 +202,7 @@ class LocalModelsProvider {
                 settings = settings,
                 prompt = effectivePrompt,
                 onToken = { token -> onToken?.invoke(token) },
-                imagePaths = imagePaths,
+                imagePaths = effectiveImagePaths,
                 audioPath = audioPath,
                 requestPriority = requestPriority,
                 maxTokensOverride = maxTokens,
@@ -223,7 +240,7 @@ class LocalModelsProvider {
                 settings = settings,
                 prompt = effectivePrompt,
                 onToken = { token -> onToken?.invoke(token) },
-                imagePaths = imagePaths,
+                imagePaths = effectiveImagePaths,
                 audioPath = audioPath,
                 requestPriority = requestPriority,
                 maxTokensOverride = maxTokens,

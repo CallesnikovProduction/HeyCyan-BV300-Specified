@@ -5,33 +5,97 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VisualIntentRouterTest {
-    @Test fun russianVisualQuestionsRequestFreshPhoto() {
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Что передо мной?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Что ты видишь?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Посмотри на это, пожалуйста"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Сфоткай и реши уравнение"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Прочитай, что здесь написано"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Что происходит передо мной?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("А какого он цвета?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Что написано на вывеске?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Можешь прочитать эту надпись?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Что у меня в руках?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Какого цвета это?"))
+    @Test fun russianVisualRequestsRequireFreshPhoto() = assertVision(
+        "Что передо мной?",
+        "Что тут?",
+        "Что здесь находится?",
+        "Что тут нарисовано?",
+        "Что изображено?",
+        "Посмотри на это.",
+        "Посмотри-ка, чё скажешь?",
+        "Глянь, что это.",
+        "Сфоткай.",
+        "Сфоткай и скажи, что это.",
+        "Сфотографируй это.",
+        "Сделай фотографию.",
+        "Сделай фото и объясни.",
+        "Сними это и расскажи.",
+        "Прочитай, что здесь написано.",
+        "Прочитай этот текст.",
+        "Переведи эту надпись.",
+        "Что написано на табличке?",
+        "Реши этот пример.",
+        "Реши пример передо мной.",
+        "Сфоткай и реши пример.",
+        "Сфотографируй и реши уравнение.",
+        "Посмотри на пример и реши его.",
+        "Посчитай предметы передо мной.",
+        "Сколько здесь машин?",
+        "Что это за предмет?",
+        "Что это за штука?",
+        "Какой это цветок?",
+        "Кто передо мной?",
+        "Кто это?",
+        "Что за растение?",
+        "Определи по виду.",
+        "Включи камеру.",
+        "Сфотографируй и реши это уравнение",
+        "Посмотри-ка, чё тут",
+        "Че это?",
+        "Чо это?",
+        "Глянь-ка, что за знак здесь",
+        "Прочти надпись на экране",
+        "Сфотографируй!",
+    )
+
+    @Test fun englishVisualRequestsRequireFreshPhoto() = assertVision(
+        "What do you see?",
+        "What's in front of me?",
+        "Take a picture and solve the equation",
+        "Read what is written here",
+        "What does this sign say?",
+        "What is written on the board?",
+        "What am I holding?",
+        "Look at this.",
+        "Translate this label.",
+        "How many cars are here?",
+        "Which flower is this?",
+        "Capture this image",
+        "What is here?",
+        "Use the camera.",
+    )
+
+    @Test fun textOnlyRequestsAndContextualFollowUpsDoNotRequestFreshPhoto() = assertNoVision(
+        "Сколько будет два плюс два?",
+        "Реши два плюс два.",
+        "Расскажи про квантовую физику.",
+        "Что такое TCP?",
+        "Переведи hello на русский.",
+        "Напиши короткое стихотворение.",
+        "Почему небо голубое?",
+        "Сколько километров в миле?",
+        "А почему?",
+        "Объясни подробнее.",
+        "Повтори.",
+        "Продолжай.",
+        "А оно ядовитое?",
+        "Переведи это на русский.",
+        "How much is two plus two?",
+        "Explain relativity.",
+        "Translate hello into Russian.",
+        "Why is the sky blue?",
+        "Tell me more.",
+    )
+
+    private fun assertVision(vararg phrases: String) {
+        phrases.forEach { phrase ->
+            assertTrue("Expected fresh vision for: $phrase", VisualIntentRouter.requiresVision(phrase))
+        }
     }
 
-    @Test fun englishVisualQuestionsRequestFreshPhoto() {
-        assertTrue(VisualIntentRouter.needsFreshPhoto("What do you see?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("What's in front of me?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Take a picture and solve the equation"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("Read what is written here"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("What does this sign say?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("What is written on the board?"))
-        assertTrue(VisualIntentRouter.needsFreshPhoto("What am I holding?"))
-    }
-
-    @Test fun ordinaryQuestionsStayTextOnly() {
-        assertFalse(VisualIntentRouter.needsFreshPhoto("Сколько будет два плюс два?"))
-        assertFalse(VisualIntentRouter.needsFreshPhoto("Сколько будет 2+2?"))
-        assertFalse(VisualIntentRouter.needsFreshPhoto("Why is the sky blue?"))
+    private fun assertNoVision(vararg phrases: String) {
+        phrases.forEach { phrase ->
+            assertFalse("Unexpected fresh vision for: $phrase", VisualIntentRouter.requiresVision(phrase))
+        }
     }
 }

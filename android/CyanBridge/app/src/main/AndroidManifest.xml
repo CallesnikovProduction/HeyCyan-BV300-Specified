@@ -118,7 +118,6 @@
         <activity android:name=".plugins.localagent.LocalAgentSettingsActivity" android:exported="false" android:label="Local Agent Settings" />
         <activity android:name=".plugins.autoaudio.AutoAudioSettingsActivity" android:exported="false" android:label="Auto Audio Settings" />
         <activity android:name=".plugins.visualdiary.VisualDiarySettingsActivity" android:exported="false" android:label="Visual Diary Settings" />
-        <activity android:name=".bridge.runtimes.evenhub.EvenHubRuntimeActivity" android:exported="false" />
 
         <service android:name=".localmodels.download.ModelDownloadForegroundService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service

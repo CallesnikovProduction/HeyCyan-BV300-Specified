@@ -15,7 +15,6 @@ research needed to support more devices without hiding their limitations.
 | Build or use the Android companion | [`android/CyanBridge/README.md`](android/CyanBridge/README.md) |
 | Connect and sync media from HeyCyan glasses | [`android/AGENTS.md`](android/AGENTS.md) |
 | Work on shared Android modules | [`heycyan-core/README.md`](heycyan-core/README.md) |
-| Investigate MemoMind/XGIMI protocol support | [`BRIDGE_RESEARCH_NOTES.md`](BRIDGE_RESEARCH_NOTES.md) |
 
 ## What CyanBridge does today
 
@@ -47,8 +46,6 @@ considered reliable.
 | HeyCyan vendor controls | Device-dependent | The bundled vendor AAR exposes camera, recording, device-info, and media commands. Validate each command on physical hardware. |
 | CyanBridge local and remote chat | Included | The app contains local runtime support and an OpenAI-compatible remote-server option. Model availability depends on the phone and configuration. |
 | CyanBridge Model Studio bridge | Experimental | Relays Studio events and approval requests over an authenticated WebSocket. It is not a substitute for reviewing desktop work. |
-| MemoMind/XGIMI | Experimental research | RFCOMM framing, device info, battery, cards, notifications, and selected settings are mapped. The adapter still needs sustained physical-device validation. |
-| Even/Mentra runtimes | Prototype | Adapter and runtime experiments are present, not a supported consumer device path. |
 
 ## Build the Android app
 
@@ -96,7 +93,6 @@ phone's Wi-Fi Direct group-owner address for the glasses address.
 | `android/glasses_sdk_20250723_v01.aar` | Vendor Android SDK artifact used by the HeyCyan path. |
 | `android/HeyCyanOfficialApp/` | Decompiled vendor app used as protocol reference. |
 | `heycyan-core/` | Shared Android modules for BLE, connectivity, data, audio, and API boundaries. |
-| `BRIDGE_RESEARCH_NOTES.md` | Detailed MemoMind/XGIMI transport and protocol findings. |
 | `WIFI_TRANSFER_ARCHITECTURE.md` | Historical technical background for the HeyCyan transfer design. |
 
 ## Upstream projects and acknowledgements

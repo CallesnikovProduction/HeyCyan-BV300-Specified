@@ -77,7 +77,7 @@ class LocalAiOrchestrator(
             }
             val messages = listOf(
                 mapOf("role" to "system", "content" to Bv300VoicePrompt.SYSTEM),
-            ) + history + mapOf("role" to "user", "content" to Bv300VoicePrompt.userContent(transcript, image != null))
+            ) + history + mapOf("role" to "user", "content" to Bv300VoicePrompt.userContent(transcript))
             ensureCurrent(requestId)
             ChatStore.addMessage(chatId, ChatRole.USER, transcript, imageAttachmentName = image?.name)
             ensureCurrent(requestId)

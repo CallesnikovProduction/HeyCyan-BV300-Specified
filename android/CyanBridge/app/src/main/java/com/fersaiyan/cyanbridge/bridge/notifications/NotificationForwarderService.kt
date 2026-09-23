@@ -20,8 +20,7 @@ import kotlinx.coroutines.launch
  * Listens for phone notifications and forwards them to the connected glasses
  * via [GlassesBridge].
  *
- * Uses the notification wire route (group 0x05, opcode 0x01) — the same
- * channel the official MemoMind app uses for phone notifications.
+ * Display forwarding uses the active GlassesBridge adapter when one is available.
  *
  * Enable/disable via [setEnabled]. The service itself is always bound when
  * the user grants Notification Listener access in system settings; the

@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
  * Permission format:
  * ```
  * Permission needed
- * Edit MemoMindAdapter.kt
+ * Edit device adapter
  * [ALLOW] [DENY]
  * ```
  */

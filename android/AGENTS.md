@@ -589,7 +589,6 @@ If they are marked with `??` and are not part of the current branch, treat them 
 Material 3 / Compose migration work is intentionally kept on separate branches:
 
 - `compose_material3_migration`
-- `memomind-adapter`
 
 `main` should stay on the current production UI approach unless the migration is deliberately merged.
 

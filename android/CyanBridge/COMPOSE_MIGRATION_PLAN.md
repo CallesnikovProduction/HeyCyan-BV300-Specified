@@ -6,7 +6,7 @@ Historical migration notes from 2026-07-15. This is not the current product plan
 
 ## Executive Decision
 
-Do not merge or rebase `compose_material3_migration` or `memomind-adapter` wholesale into current `main`.
+Do not merge or rebase `compose_material3_migration` wholesale into current `main`.
 
 Preserve the old branch tips as archive references and selectively port screen structure and visual ideas into current Android code. Current business logic must remain authoritative.
 
@@ -14,7 +14,6 @@ Recommended branch workflow for future isolated migration work:
 
 ```bash
 git branch archive/compose-material3-2026-07 compose_material3_migration
-git branch archive/memomind-adapter-2026-07 memomind-adapter
 git switch main
 git switch -c compose-material3-kmp-v2
 ```
@@ -54,7 +53,7 @@ Still pending:
 
 - Manual SM-F956B hardware acceptance on 2026-07-15 passed connection, scan, photo/video/audio capture, battery readout, and Wi-Fi Direct P2P media sync. Compose chat thread/composer validation remains useful for IME, gesture and three-button navigation, landscape, split screen, 200 percent font scale, and TalkBack. The old XML layout remains in resources as a rollback reference only and is no longer the production view tree.
 - AI image-question capture needs a focused physical retest. Device logs showed a newly requested capture racing the glasses `0x02` photo-ready event, then falling back to an old `Glasses_AI_*` file. The Android flow now serializes one fresh thumbnail request after `0x02`, retries an incomplete/non-decodable response once, and only then considers the age-limited fallback; verify this with a real image question before claiming the feature accepted.
-- The Glasses dashboard, device binding, onboarding, battery guidance, notes, Local Agent tools, transcription diagnostics, EvenHub host, Pro subscription, Settings, media, and plugins now render through Compose. The Glasses dashboard deliberately keeps the existing Android control handlers behind a non-visible compatibility adapter so BLE, Wi-Fi Direct, capture, and transfer behavior is unchanged.
+- The Glasses dashboard, device binding, onboarding, battery guidance, notes, Local Agent tools, transcription diagnostics, Pro subscription, Settings, media, and plugins now render through Compose. The Glasses dashboard deliberately keeps the existing Android control handlers behind a non-visible compatibility adapter so BLE, Wi-Fi Direct, capture, and transfer behavior is unchanged.
 - Local-model configuration and Pro subscription settings now render as Material 3 Compose screens. Their existing Android Activity handlers remain non-visible compatibility adapters for downloads, local runtimes, billing, encrypted credentials, permissions, and Studio Bridge lifecycle work.
 - The compatibility adapters for Local Models and Pro now mount as explicit hidden siblings behind the visible `ComposeView`; Compose no longer replaces a briefly visible XML root during Activity startup.
 - Curated local-model catalog metadata and lookup now compile from `:shared`; Android-only download, storage, runtime, preference, and device-capability adapters remain in `:app`.
@@ -92,10 +91,8 @@ Audit baseline:
 
 - `main`: `ecfb1ae` before the current working migration implementation.
 - `compose_material3_migration`: `15f810c`.
-- `memomind-adapter`: `f3387b9`.
 - Common ancestor: `3de11e8`.
 - Compose branch divergence at the implementation baseline: 50 commits exist only on current main and 26 commits exist only on the Compose branch.
-- MemoMind branch divergence at the implementation baseline: 50 commits exist only on current main and 28 commits exist only on the MemoMind branch.
 
 This is not a small update. Current main added or substantially changed:
 
@@ -105,7 +102,7 @@ This is not a small update. Current main added or substantially changed:
 - Auto-capture, audio ingestion, image-query, and local-model behavior.
 - Asaas subscription, cancellation, quota, email, donation, and checkout behavior.
 - Studio Bridge voice approval support and encrypted remote-model credentials.
-- MemoMind, EvenHub, Mentra, and terminal HUD groundwork.
+- Terminal HUD groundwork.
 - New settings, onboarding, plugin, debugging, and media behaviors.
 
 Any migration that starts from the old Compose branch would have to reconstruct these changes and is likely to regress production behavior.
@@ -132,17 +129,6 @@ The old branch is a substantial prototype, not a failed empty branch. It include
 | Local agent | Daily facts, summary, blacklist, captures, pending actions, synced media | Android-only capabilities must remain behind platform interfaces |
 
 The branch has Compose test dependencies but no meaningful Compose UI test suite. The only relevant test found under the branch UI area is the existing `ChatStoreTest`. Runtime layout and accessibility regressions were therefore found manually.
-
-## MemoMind Branch Relationship
-
-`memomind-adapter` is based on the old Material 3 branch. It is not an independent modern base.
-
-It adds two commits after `15f810c`:
-
-- `fec245e`: notification channel adjustment.
-- `f3387b9`: signed release build documentation.
-
-Current main now contains most of the bridge core, protocol, runtime, audio, and notification groundwork. The old branch still contains `MemoMindDeviceAdapter.kt`, which current main does not. If that adapter is revived, port that file selectively only after validating it against the current protocol notes and current `GlassesDeviceAdapter` contract. Do not merge the MemoMind branch to obtain it.
 
 ## iOS Foundation And Decision Gate
 
@@ -288,7 +274,6 @@ Android adapters remain responsible for:
 - Accessibility and local-agent services.
 - MediaStore and Android audio APIs.
 - Play Billing, web checkout, and deep links.
-- Meta DAT and Android MemoMind transports.
 
 ## Toolchain Gate
 
@@ -517,7 +502,6 @@ Tasks:
   11. Pro Subscription.
   12. Onboarding / Welcome.
   13. Transcription Debug.
-  14. EvenHub.
 - Each screen migration: copy composable to `shared/commonMain`, change imports, remove `android.*`/`Context`/`R.*` references, `:app` imports from shared.
 - iOS gets each screen for free as it's added to shared.
 
@@ -695,13 +679,11 @@ Current route and capability inventory:
 | Local models configuration | compose | Material 3 configuration screen; runtime, download, storage, encrypted credentials, and Studio Bridge behavior remain Activity-owned through typed presentation actions |
 | Local-agent screens | compose | Material 3 facts, summaries, capture history, pending-action approval, and blacklist tools; accessibility and storage behavior remain Activity-owned |
 | Transcription debug | compose | Material 3 developer surface; transcription pipeline remains Activity-owned |
-| EvenHub runtime | hybrid | Material 3 host with an AndroidView WebView interoperability boundary |
 | `cyanbridge://` callback | android-platform | Handled by `MainActivity` |
 | `https://cyanbridge.vercel.app/web-subscribe/callback` | android-platform | Auto-verified app link handled by subscription callback Activity |
 | Meeting, local-agent, auto-audio, Studio Bridge services | android-platform | Do not move into composables |
 | Notification listener and daily reminder receiver | android-platform | Preserve manifest and permission behavior |
 | HeyCyan BLE and Wi-Fi Direct transfer | android-platform | Forked/current Android implementation remains authoritative |
-| Meta DAT and MemoMind transports | android-platform | Capability-gated Android integrations |
 | iOS KMP framework host | hybrid | CMP `ComposeUIViewController` embedded in SwiftUI via `UIViewControllerRepresentable`; CI validates framework link, Xcode build, simulator launch |
 | iOS application transport | deferred | Await vendor-wrapper, Kotlin-protocol, or hybrid decision after device tests |
 

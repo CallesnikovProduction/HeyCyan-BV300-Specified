@@ -1,21 +1,29 @@
 package com.fersaiyan.cyanbridge.localai
 
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class Bv300VoicePromptTest {
-    @Test fun voicePromptExplainsTransportAndImageBoundary() {
-        assertTrue(Bv300VoicePrompt.SYSTEM.contains("BV300"))
-        assertTrue(Bv300VoicePrompt.SYSTEM.contains("динамиках"))
-        assertTrue(Bv300VoicePrompt.SYSTEM.contains("если к текущему запросу не приложен снимок"))
-        assertTrue(Bv300VoicePrompt.SYSTEM.contains("живой, тёплый разговор"))
-        assertTrue(Bv300VoicePrompt.SYSTEM.contains("не сокращай полезное объяснение искусственно"))
+    @Test fun systemPromptGroundsOnlyCurrentAttachedImageAndRespectsUserTask() {
+        assertTrue(Bv300VoicePrompt.SYSTEM.contains("Blackview BV300"))
+        assertTrue(Bv300VoicePrompt.SYSTEM.contains("свежий кадр BV300 для этого запроса"))
+        assertTrue(Bv300VoicePrompt.SYSTEM.contains("выполни по нему именно задачу"))
+        assertTrue(Bv300VoicePrompt.SYSTEM.contains("реши или объясни"))
+        assertFalse(Bv300VoicePrompt.SYSTEM.contains("всегда описывай"))
+        assertFalse(Bv300VoicePrompt.SYSTEM.contains("описывай то, что видит пользователь"))
+        assertFalse(Bv300VoicePrompt.SYSTEM.contains("одним предложением"))
     }
 
-    @Test fun attachedPhotoIsExplicitOnlyForVisualTurn() {
-        val question = "Что передо мной?"
-        assertTrue(Bv300VoicePrompt.userContent(question, true).contains("уже приложен новый снимок"))
-        assertTrue(Bv300VoicePrompt.userContent(question, true).contains(question))
-        assertTrue(Bv300VoicePrompt.userContent(question, false) == question)
+    @Test fun imageDoesNotRewriteOrAugmentRecognizedUserText() {
+        listOf(
+            "Сфотографируй и реши этот пример",
+            "Прочитай этот текст",
+            "Переведи эту надпись",
+            "Что тут нарисовано?",
+        ).forEach { transcript ->
+            assertEquals(transcript, Bv300VoicePrompt.userContent(transcript))
+        }
     }
 }

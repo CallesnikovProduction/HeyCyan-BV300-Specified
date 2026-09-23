@@ -180,7 +180,6 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicReference
 import javax.net.SocketFactory
-import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -267,18 +266,13 @@ import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutAction
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutButton
 import com.fersaiyan.cyanbridge.shared.plugins.NativePluginShortcutUiState
 import com.fersaiyan.cyanbridge.tasker.TaskerIntegrationManager
-import com.fersaiyan.cyanbridge.localagent.context.LocalAgentContextBuilder
-import com.fersaiyan.cyanbridge.localagent.dailyfacts.DailyFactsStorage
-import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemorySearch
+import com.fersaiyan.cyanbridge.localagent.context.LocalAgentQueryContextBuilder
 import com.fersaiyan.cyanbridge.localagent.memory.RagProfile
-import com.fersaiyan.cyanbridge.localagent.memory.LocalAgentMemoryStore
-import com.fersaiyan.cyanbridge.localagent.userfacts.CandidateUserFactsStorage
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.localmodels.tts.StreamingSpeechSessionManager
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
-import com.fersaiyan.cyanbridge.memoryvault.MemoryPolicyService
 import com.fersaiyan.cyanbridge.ui.appearance.AppearancePreferences
 import com.fersaiyan.cyanbridge.ui.appearance.rememberAppearanceSettings
 import com.fersaiyan.cyanbridge.shared.ui.CyanBridgeApp
@@ -290,6 +284,7 @@ import kotlinx.coroutines.flow.merge
 
 
 class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
+    private val queryMemoryContextBuilder by lazy { LocalAgentQueryContextBuilder(this) }
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var moyoungReplyPlayer: android.media.MediaPlayer? = null
@@ -574,11 +569,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         private const val AI_MODE_PHONE_ASSISTANT = "PhoneAssistant"
         private const val AI_MODE_TASKER = "Tasker"
         private const val AI_MODE_CUSTOM_AI_PROVIDER = "CustomAiProvider"
-        private const val QUERY_MAX_AGENT_PERSONA_CHARS = 1200
-        private const val QUERY_MAX_USER_FACTS_CHARS = 1400
-        private const val QUERY_MAX_CONFIRMED_FACTS_CHARS = 1800
-        private const val QUERY_MAX_DAILY_SUMMARY_CHARS = 2200
-        private const val QUERY_MAX_TOTAL_CONTEXT_CHARS = 6500
 
         private const val IMAGE_QUESTION_MAX_IMAGE_AGE_MS = 3L * 60L * 1000L
         private const val P2P_GROUP_REMOVAL_RETRY_MS = 1_000L
@@ -4203,131 +4193,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
     }
 
-    private fun todayDateString(tsMs: Long = System.currentTimeMillis()): String {
-        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        return fmt.format(java.util.Date(tsMs))
-    }
-
-    private fun tokenizeMemoryQuery(text: String): List<String> {
-        val stopwords = setOf(
-            "the", "and", "for", "with", "that", "this", "from", "into", "what", "when",
-            "how", "who", "why", "are", "was", "were", "can", "could", "should", "would",
-            "will", "just", "like", "your", "you", "about", "have", "has", "had", "then",
-            "que", "para", "com", "uma", "nao", "não", "isso", "essa", "esse", "foi", "tem",
-            "como", "porque", "por", "das", "dos", "uns", "umas"
-        )
-
-        return text
-            .lowercase(Locale.US)
-            .split(Regex("[^\\p{L}\\p{N}]+"))
-            .map { it.trim() }
-            .filter { it.length >= 3 && it !in stopwords }
-            .distinct()
-    }
-
-    private fun selectRelevantMemoryItems(items: List<String>, queryText: String, maxItems: Int): List<String> {
-        val clean = items
-            .map { it.trim().removePrefix("- ").removePrefix("* ").trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-
-        if (clean.isEmpty()) return emptyList()
-        val tokens = tokenizeMemoryQuery(queryText)
-        if (tokens.isEmpty()) return clean.take(minOf(maxItems, 2))
-
-        val scored = clean.map { item ->
-            val hay = item.lowercase(Locale.US)
-            var score = 0
-            for (token in tokens) {
-                if (hay.contains(token)) score += 1
-            }
-            item to score
-        }
-
-        val hits = scored
-            .filter { it.second > 0 }
-            .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first.length })
-            .map { it.first }
-            .take(maxItems)
-
-        return if (hits.isNotEmpty()) hits else clean.take(minOf(maxItems, 2))
-    }
-
-    private fun buildCompactMemoryAwareSystemPrompt(
-        queryText: String,
-        date: String,
-        ragProfile: RagProfile,
-    ): String {
-        if (ragProfile == RagProfile.NONE) return ""
-        val light = ragProfile == RagProfile.LIGHT
-        val extraSections = mutableListOf<LocalAgentContextBuilder.Section>()
-
-        val retrieval = LocalAgentMemorySearch.buildRelevantMemoryBlock(
-            context = this,
-            queryText = queryText,
-            date = date,
-            lookbackDaysFacts = if (light) 3 else 5,
-            topFacts = if (light) 2 else 4,
-            topSummaryLines = if (light) 1 else 3,
-            maxChars = if (light) 500 else 900,
-            ragProfile = ragProfile,
-        )
-        if (retrieval.isNotBlank()) {
-            extraSections += LocalAgentContextBuilder.Section(
-                title = "Relevant memory (search hits)",
-                content = retrieval,
-            )
-        }
-
-        val draftFacts = runCatching { DailyFactsStorage.load(this, date).draft }.getOrDefault(emptyList())
-        val draftRef = LocalAgentMemoryStore.memoryRefForFile(
-            this,
-            LocalAgentMemoryStore.dailyFactsFileForDate(this, date),
-        )
-        val relevantDraft = if (MemoryPolicyService.isMemoryRefSearchEligible(this, draftRef)) {
-            selectRelevantMemoryItems(draftFacts, queryText, maxItems = if (light) 1 else 4)
-        } else {
-            emptyList()
-        }
-        if (relevantDraft.isNotEmpty()) {
-            extraSections += LocalAgentContextBuilder.Section(
-                title = "Today's draft daily facts (unconfirmed)",
-                content = relevantDraft.joinToString("\n") { "- $it" },
-            )
-        }
-
-        val candidateFacts = runCatching { CandidateUserFactsStorage.load(this, date) }.getOrDefault(emptyList())
-        val candidateRef = LocalAgentMemoryStore.memoryRefForFile(
-            this,
-            LocalAgentMemoryStore.userFactsCandidatesFileForDate(this, date),
-        )
-        val relevantCandidates = if (MemoryPolicyService.isMemoryRefSearchEligible(this, candidateRef)) {
-            selectRelevantMemoryItems(candidateFacts, queryText, maxItems = if (light) 1 else 3)
-        } else {
-            emptyList()
-        }
-        if (relevantCandidates.isNotEmpty()) {
-            extraSections += LocalAgentContextBuilder.Section(
-                title = "Candidate user facts (pending review)",
-                content = relevantCandidates.joinToString("\n") { "- $it" },
-            )
-        }
-
-        val builder = LocalAgentContextBuilder(
-            maxAgentPersonaChars = if (light) 300 else QUERY_MAX_AGENT_PERSONA_CHARS,
-            maxUserFactsChars = if (light) 400 else QUERY_MAX_USER_FACTS_CHARS,
-            maxConfirmedDailyFactsChars = if (light) 350 else QUERY_MAX_CONFIRMED_FACTS_CHARS,
-            maxDailySummaryChars = if (light) 300 else QUERY_MAX_DAILY_SUMMARY_CHARS,
-            maxTotalChars = if (light) 1_800 else QUERY_MAX_TOTAL_CONTEXT_CHARS,
-        )
-
-        return builder.buildSystemMessage(
-            context = this,
-            date = date,
-            extraSections = extraSections,
-        )
-    }
-
     private suspend fun runChosenProviderQuery(
         userPrompt: String,
         providerType: AgentProviderType,
@@ -4336,10 +4201,10 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         audioPath: String? = null,
         onToken: ((String) -> Unit)? = null,
     ): String {
-        val date = todayDateString()
+        val date = queryMemoryContextBuilder.todayDateString()
         val languageTag = recognitionLanguageTag()
         val systemPrompt = buildString {
-            val memoryContext = buildCompactMemoryAwareSystemPrompt(
+            val memoryContext = queryMemoryContextBuilder.buildSystemPrompt(
                 queryText = userPrompt,
                 date = date,
                 ragProfile = ragProfile,
