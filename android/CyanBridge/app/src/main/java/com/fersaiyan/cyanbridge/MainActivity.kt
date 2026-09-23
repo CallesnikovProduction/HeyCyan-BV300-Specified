@@ -30,6 +30,8 @@ import com.fersaiyan.cyanbridge.media.GallerySaveResult
 import com.fersaiyan.cyanbridge.media.VendorAlbumDownloader
 import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
 import com.fersaiyan.cyanbridge.media.HeyCyanP2pPeerSelector
+import com.fersaiyan.cyanbridge.media.HeyCyanMediaAddressPolicy
+import com.fersaiyan.cyanbridge.glasses.BatteryResponseParser
 import com.fersaiyan.cyanbridge.media.OfficialHeyCyanApp
 import com.fersaiyan.cyanbridge.media.OpusOggWrapper
 import com.fersaiyan.cyanbridge.ota.FirmwareClient
@@ -7014,7 +7016,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         // Add battery listener. According to the SDK docs this
         // callback is invoked when syncBattery completes.
         LargeDataHandler.getInstance().addBatteryCallBack("init") { _, response ->
-            val result = parseBatteryResponse(response)
+            val result = BatteryResponseParser.parse(response)
             Log.i("BatteryCallback", result.message)
             runOnUiThread {
                 updateBatteryText(result.battery)
@@ -7027,36 +7029,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     pendingBatteryToast = false
                 }
             }
-        }
-    }
-
-    private data class BatteryResult(
-        val battery: Int?,
-        val charging: Boolean?,
-        val message: String
-    )
-
-    private fun parseBatteryResponse(response: Any?): BatteryResult {
-        if (response == null) {
-            return BatteryResult(null, null, "Battery callback: null response")
-        }
-        return try {
-            val clazz = response.javaClass
-            val batteryField = clazz.getDeclaredField("battery").apply {
-                isAccessible = true
-            }
-            val chargingField = clazz.getDeclaredField("charging").apply {
-                isAccessible = true
-            }
-
-            val battery = batteryField.getInt(response)
-            val charging = chargingField.getBoolean(response)
-            val message =
-                "Battery: $battery% (${if (charging) "charging" else "not charging"})"
-            BatteryResult(battery, charging, message)
-        } catch (e: Exception) {
-            Log.e("BatteryCallback", "Failed to parse BatteryResponse", e)
-            BatteryResult(null, null, "Battery: $response")
         }
     }
 
@@ -9632,30 +9604,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    private fun isProbablyGroupOwnerIp(ip: String?): Boolean {
-        if (ip.isNullOrBlank()) return false
-
-        // If the phone is not the group owner, then we shouldn't block the group owner IP (.1)
-        // because it belongs to the glasses.
-        if (downloadPhoneIsGroupOwner != true) return false
-
-        // Typical Wi‑Fi Direct GO address when phone is GO.
-        return ip == "192.168.49.1"
-    }
-
-    private fun ipv4Prefix24(ip: String?): String? {
-        if (ip.isNullOrBlank()) return null
-        val parts = ip.split(".")
-        if (parts.size != 4) return null
-        return "${parts[0]}.${parts[1]}.${parts[2]}."
-    }
-
     private fun guessDownloadSubnetPrefix(): String? {
         // Prefer authoritative device IPs when available; otherwise fall back to
         // the group owner's subnet and finally the active Wi‑Fi/P2P interface subnet.
-        ipv4Prefix24(downloadBleIp)?.let { return it }
-        ipv4Prefix24(bleIpBridge.ip.value)?.let { return it }
-        ipv4Prefix24(downloadWifiIp)?.let { return it }
+        HeyCyanMediaAddressPolicy.ipv4Prefix24(downloadBleIp)?.let { return it }
+        HeyCyanMediaAddressPolicy.ipv4Prefix24(bleIpBridge.ip.value)?.let { return it }
+        HeyCyanMediaAddressPolicy.ipv4Prefix24(downloadWifiIp)?.let { return it }
 
         val network = downloadP2pNetwork ?: findLikelyP2pNetwork()
         if (network != null) {
@@ -9665,7 +9619,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 val addr = lp?.linkAddresses
                     ?.mapNotNull { it.address.hostAddress }
                     ?.firstOrNull { it.count { ch -> ch == '.' } == 3 }
-                ipv4Prefix24(addr)?.let { return it }
+                HeyCyanMediaAddressPolicy.ipv4Prefix24(addr)?.let { return it }
             } catch (_: Exception) {
                 // ignore
             }
@@ -9674,25 +9628,12 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
     }
 
     private fun buildCandidateIps(): List<String> {
-        val set = LinkedHashSet<String>()
-
-        downloadBleIp?.let { set.add(it) }
-        bleIpBridge.ip.value?.let { set.add(it) }
-
-        if (downloadPhoneIsGroupOwner == false && downloadWifiIp != null) {
-            set.add(downloadWifiIp!!)
-        } else {
-            downloadWifiIp?.let { set.add(it) }
-        }
-
-        guessDownloadSubnetPrefix()?.let { prefix ->
-            set.add("${prefix}1") // Glasses might be the group owner
-            set.add("${prefix}79")
-            set.add("${prefix}2")
-            set.add("${prefix}3")
-        }
-
-        return set.toList()
+        return HeyCyanMediaAddressPolicy.candidateIps(
+            bleIp = downloadBleIp,
+            bridgeIp = bleIpBridge.ip.value,
+            wifiIp = downloadWifiIp,
+            subnetPrefix = guessDownloadSubnetPrefix(),
+        )
     }
 
     private fun isPortOpen(ip: String, port: Int, timeoutMs: Int): Boolean {
@@ -9974,7 +9915,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 for (candidate in buildCandidateIps()) {
                     if (!isActive || !isDownloadSessionActive(sessionId)) return@launchDownloadSession
                     if (candidate.isBlank()) continue
-                    if (isProbablyGroupOwnerIp(candidate)) {
+                    if (HeyCyanMediaAddressPolicy.isProbablyPhoneGroupOwnerIp(candidate, downloadPhoneIsGroupOwner)) {
                         // The phone typically has nothing on port 80.
                         continue
                     }
@@ -10188,9 +10129,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
             val prefixHints = listOfNotNull(
-                ipv4Prefix24(downloadBleIp),
-                ipv4Prefix24(bleIpBridge.ip.value),
-                ipv4Prefix24(downloadWifiIp)
+                HeyCyanMediaAddressPolicy.ipv4Prefix24(downloadBleIp),
+                HeyCyanMediaAddressPolicy.ipv4Prefix24(bleIpBridge.ip.value),
+                HeyCyanMediaAddressPolicy.ipv4Prefix24(downloadWifiIp)
             ).distinct()
 
             for (n in cm.allNetworks) {
