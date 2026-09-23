@@ -1268,7 +1268,7 @@ class ChatThreadActivity : AppCompatActivity() {
                         activity = this@ChatThreadActivity,
                         title = "Local runtime issue",
                         issueType = "Local runtime issue",
-                        description = "CyanBridge hit a local model runtime error while generating this reply.",
+                        description = "BlackVingadorre hit a local model runtime error while generating this reply.",
                         extraInfo = linkedMapOf(
                             "screen" to "chat_thread",
                             "image_attachments" to imagePaths.size.toString(),

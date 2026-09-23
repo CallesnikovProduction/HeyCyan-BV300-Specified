@@ -29,6 +29,7 @@ import com.fersaiyan.cyanbridge.media.GalleryMediaStore
 import com.fersaiyan.cyanbridge.media.GallerySaveResult
 import com.fersaiyan.cyanbridge.media.VendorAlbumDownloader
 import com.fersaiyan.cyanbridge.media.HeyCyanP2pPolicy
+import com.fersaiyan.cyanbridge.media.HeyCyanP2pPeerSelector
 import com.fersaiyan.cyanbridge.media.OfficialHeyCyanApp
 import com.fersaiyan.cyanbridge.media.OpusOggWrapper
 import com.fersaiyan.cyanbridge.ota.FirmwareClient
@@ -40,7 +41,7 @@ import com.fersaiyan.cyanbridge.ota.OtaState
 import com.fersaiyan.cyanbridge.ota.OtaTarget
 import com.fersaiyan.cyanbridge.ota.expectedFirmwareExtension
 import com.fersaiyan.cyanbridge.ota.firmwareRelayBaseUrl
-import com.fersaiyan.cyanbridge.ota.isExpectedFirmwareFilename
+import com.fersaiyan.cyanbridge.ota.PersonalFirmwareStager
 import com.fersaiyan.cyanbridge.glasses.GlassesSession
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionLease
 import com.fersaiyan.cyanbridge.glasses.GlassesSessionCoordinator
@@ -154,7 +155,6 @@ import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pInfo
 import android.net.ConnectivityManager
 import android.net.Network
-import android.provider.OpenableColumns
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
@@ -3059,7 +3059,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         ),
                     )
                 }
-                val firmwareFile = copyPersonalFirmware(uri, target)
+                val firmwareFile = PersonalFirmwareStager(this@MainActivity).copy(uri, target)
                 withContext(Dispatchers.Main) {
                     if (target == OtaTarget.V821_WIFI) {
                         stagedPersonalWifiFirmware = firmwareFile
@@ -3117,57 +3117,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
     private fun abortPersonalFirmwareSelection(message: String) {
         finishPersonalFirmwareSelection(message)
-    }
-
-    private fun copyPersonalFirmware(uri: Uri, target: OtaTarget): File {
-        val displayName = personalFirmwareDisplayName(uri)
-            ?: throw IllegalArgumentException("The selected document has no filename")
-        if (!target.isExpectedFirmwareFilename(displayName)) {
-            throw IllegalArgumentException("Select a ${target.expectedFirmwareExtension()} file for this target")
-        }
-
-        val otaDir = File(filesDir, "ota/personal")
-        if (!otaDir.exists() && !otaDir.mkdirs()) {
-            throw IllegalStateException("Could not create private OTA storage")
-        }
-        val targetName = target.name.lowercase()
-        val outputFile = File(
-            otaDir,
-            "personal_${targetName}_${System.currentTimeMillis()}${target.expectedFirmwareExtension()}",
-        )
-        val stagingFile = File(otaDir, ".${outputFile.name}.partial")
-        try {
-            contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(stagingFile).use { output -> input.copyTo(output) }
-            } ?: throw IllegalArgumentException("The selected document cannot be read")
-
-            if (stagingFile.length() <= 0L) {
-                throw IllegalArgumentException("The selected firmware file is empty")
-            }
-            if (!stagingFile.renameTo(outputFile)) {
-                throw IllegalStateException("Could not finalize the selected firmware file")
-            }
-            return outputFile
-        } finally {
-            if (stagingFile.exists()) stagingFile.delete()
-        }
-    }
-
-    private fun personalFirmwareDisplayName(uri: Uri): String? {
-        val displayName = runCatching {
-            contentResolver.query(
-                uri,
-                arrayOf(OpenableColumns.DISPLAY_NAME),
-                null,
-                null,
-                null,
-            )?.use { cursor ->
-                val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
-            }
-        }.getOrNull()
-        return displayName?.trim()?.takeIf { it.isNotEmpty() }
-            ?: uri.lastPathSegment?.substringAfterLast('/')?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private fun resetOtaDashboardToIdle() {
@@ -5868,7 +5817,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                 stopSco()
                                 if (!AutomationPrefs.isLocalAgentAutomationEnabled(this@MainActivity)) {
                                     finishVoiceQueryWork()
-                                    speak("Enable Local Agent phone control in CyanBridge settings first.")
+                                    speak("Enable Local Agent phone control in BlackVingadorre settings first.")
                                     return@runOnUiThread
                                 }
                                 if (isDeviceLockedForAutomation()) {
@@ -5878,7 +5827,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                                 }
                                 if (!TaskerIntegrationManager.inspect(this@MainActivity).automationEnvironmentReady) {
                                     finishVoiceQueryWork()
-                                    speak("Complete Tasker and AutoInput setup in CyanBridge Plugins first.")
+                                    speak("Complete Tasker and AutoInput setup in BlackVingadorre Plugins first.")
                                     return@runOnUiThread
                                 }
 
@@ -6323,7 +6272,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
             setPackage(targetPackage)
             putExtra(Intent.EXTRA_STREAM, imageUri)
             putExtra(Intent.EXTRA_TEXT, question)
-            clipData = ClipData.newRawUri("CyanBridge image", imageUri)
+            clipData = ClipData.newRawUri("BlackVingadorre image", imageUri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         return runCatching {
@@ -7175,121 +7124,6 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun currentBleMacNoColonUpper(): String? {
-        return try {
-            DeviceManager.getInstance().deviceAddress
-                ?.replace(":", "")
-                ?.uppercase(Locale.US)
-                ?.takeIf { it.isNotBlank() }
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun likelyGlassesPeerStrength(device: WifiP2pDevice, bleMacNoColon: String?): Int {
-        val name = (device.deviceName ?: "").uppercase(Locale.US)
-        if (name.isBlank()) return -1
-
-        if (!bleMacNoColon.isNullOrBlank() && name.contains(bleMacNoColon)) {
-            return 100
-        }
-
-        if (
-            name.contains("HEYCYAN") ||
-            name.contains("CYAN") ||
-            name.startsWith("O_") ||
-            name.startsWith("Q_")
-        ) {
-            return 80
-        }
-
-        // Known glasses model prefixes/brands from glasses_models.txt
-        val glassesPrefixes = arrayOf(
-            "AIM", "CR-", "SG", "GL-", "ST-AG", "BW-AG", "ABG-", "RG-",
-            "ZIC-GLA", "QK-SG", "TF-GL", "HY-G", "NLB", "DM-", "ES-",
-            "GS", "BV", "XC", "CG", "WL-", "ID-", "AZBV", "PW-", "GV3",
-            "AX01", "ER0S", "VEU", "FIRELENS", "VIBELENS", "AIWR", "ROLBATCH",
-            "DPVR", "VIZO", "SMARTVIEW", "KSIX", "VISO", "MD02", "WAGA",
-            "BROOKLYN", "KATLOS", "FASTRACK", "HUGUR", "NILOX", "VEYRA",
-            "AHENOD", "BOMANLON", "TRUSMI", "FABRIKA", "MICROWEAR",
-            "WANDERTH", "PANGBOLIN", "SEEVA", "ASTR", "LENYES", "BLISBOND",
-            "MEEEGOU", "NEOSEE", "SOBAST"
-        )
-
-        if (glassesPrefixes.any { name.startsWith(it) || name.contains(it) }) {
-            return 70
-        }
-
-        if (name.contains("AIMB-") || name.contains("GLASS")) {
-            return 70
-        }
-
-        // Weak fallback only when nothing else looks like the glasses.
-        if (Regex("[A-F0-9]{12}").containsMatchIn(name)) {
-            return 30
-        }
-
-        return -1
-    }
-
-    private fun selectBestLikelyGlassesPeer(peers: Collection<WifiP2pDevice>): WifiP2pDevice? {
-        if (peers.isEmpty()) return null
-
-        val bleMacNoColon = currentBleMacNoColonUpper()
-        val scored = peers
-            .map { peer -> peer to likelyGlassesPeerStrength(peer, bleMacNoColon) }
-            .filter { (_, score) -> score >= 0 }
-        if (scored.isEmpty()) return null
-
-        val bestScore = scored.maxOf { it.second }
-        val bestPeers = scored.filter { it.second == bestScore }.map { it.first }
-
-        // Do not guess among multiple weak hex-only matches; keep waiting for a stronger signal.
-        if (bestScore <= 30 && bestPeers.size > 1) {
-            Log.i(
-                "DataDownload",
-                "Ambiguous weak glasses peer candidates; waiting for a stronger match: ${bestPeers.map { "${it.deviceName}/${it.deviceAddress}" }}"
-            )
-            return null
-        }
-
-        return bestPeers.firstOrNull { it.status == WifiP2pDevice.AVAILABLE }
-            ?: bestPeers.firstOrNull()
-    }
-
-    private fun selectOfficialLikelyGlassesPeer(peers: Collection<WifiP2pDevice>): WifiP2pDevice? {
-        if (peers.isEmpty()) return null
-
-        val pairedName = try {
-            DeviceManager.getInstance().deviceName
-        } catch (_: Exception) {
-            null
-        }
-        val pairedAddress = try {
-            DeviceManager.getInstance().deviceAddress
-        } catch (_: Exception) {
-            null
-        }
-
-        fun matches(peer: WifiP2pDevice): Boolean {
-            return HeyCyanP2pPolicy.matchesOfficialPeer(peer.deviceName, pairedName, pairedAddress)
-        }
-
-        return peers.firstOrNull { matches(it) && it.status == WifiP2pDevice.AVAILABLE }
-            ?: peers.firstOrNull(::matches)
-    }
-
-    private fun expectedOfficialP2pName(): String {
-        return try {
-            HeyCyanP2pPolicy.officialWifiDirectName(
-                DeviceManager.getInstance().deviceName,
-                DeviceManager.getInstance().deviceAddress,
-            ).orEmpty()
-        } catch (_: Exception) {
-            ""
-        }
-    }
-
     private fun showDownloadFlowPicker() {
         showDownloadFlowPicker = true
     }
@@ -7897,7 +7731,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 }
 
                 if (downloadFlowMode == GlassesSyncFlow.OFFICIAL_HEYCYAN) {
-                    val target = selectOfficialLikelyGlassesPeer(peers)
+                    val target = HeyCyanP2pPeerSelector.selectOfficialLikelyGlassesPeer(peers)
                     if (target == null) {
                         val pairedName = try { DeviceManager.getInstance().deviceName } catch (_: Exception) { "?" }
                         val pairedMac = try { DeviceManager.getInstance().deviceAddress } catch (_: Exception) { "?" }
@@ -7918,7 +7752,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     return
                 }
 
-                val target = selectBestLikelyGlassesPeer(peers)
+                val target = HeyCyanP2pPeerSelector.selectBestLikelyGlassesPeer(peers)
                 if (target == null) {
                     noMatchPeerCount++
                     val pairedName = try { DeviceManager.getInstance().deviceName } catch (_: Exception) { "?" }
@@ -8459,7 +8293,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
 
             setTransferDetail("Sync is taking longer than expected")
             maybeShowP2pSyncLogHelp(
-                reason = "CyanBridge got stuck before media transfer started. The sync button was pressed ${waitedSeconds}s ago and the transfer counters never advanced.",
+                reason = "BlackVingadorre got stuck before media transfer started. The sync button was pressed ${waitedSeconds}s ago and the transfer counters never advanced.",
             )
         }
     }
@@ -8545,7 +8379,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                 "transfer_mode_callback_received" to transferModeCommandCallbackReceived.toString(),
                 "transfer_mode_callback_latency_ms" to (transferModeCommandCallbackLatencyMs?.toString() ?: ""),
                 "transfer_mode_evidence_received" to transferModeCommandEvidenceReceived.toString(),
-                "expected_official_p2p_name" to expectedOfficialP2pName(),
+                "expected_official_p2p_name" to HeyCyanP2pPeerSelector.expectedOfficialP2pName(),
                 "selected_download_network" to selectedDownloadNetworkSummary,
                 "seen_p2p_peers" to seenP2pPeers.joinToString(", "),
                 "active_glasses_session" to (GlassesSessionCoordinator.currentSession()?.name ?: "none"),
@@ -8569,9 +8403,9 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         downloadSupportDialogShown = true
 
         val reason = buildString {
-            appendLine("CyanBridge found other Wi‑Fi Direct devices but could not find the glasses ($pairedDevice) among them.")
+            appendLine("BlackVingadorre found other Wi‑Fi Direct devices but could not find the glasses ($pairedDevice) among them.")
             appendLine()
-            appendLine("IMPORTANT: If the official HeyCyan app is installed, force-stop it now (Settings → Apps → HeyCyan → Force Stop). It may be holding the P2P connection and preventing CyanBridge from discovering the glasses.")
+            appendLine("IMPORTANT: If the official HeyCyan app is installed, force-stop it now (Settings → Apps → HeyCyan → Force Stop). It may be holding the P2P connection and preventing BlackVingadorre from discovering the glasses.")
             appendLine()
             appendLine("Also try turning OFF the following devices or moving away from them, then tap Try Again:")
             appendLine()
@@ -8606,7 +8440,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                         "transfer_mode_callback_received" to transferModeCommandCallbackReceived.toString(),
                         "transfer_mode_callback_latency_ms" to (transferModeCommandCallbackLatencyMs?.toString() ?: ""),
                         "transfer_mode_evidence_received" to transferModeCommandEvidenceReceived.toString(),
-                        "expected_official_p2p_name" to expectedOfficialP2pName(),
+                        "expected_official_p2p_name" to HeyCyanP2pPeerSelector.expectedOfficialP2pName(),
                         "selected_download_network" to selectedDownloadNetworkSummary,
                         "seen_p2p_peers" to seenPeers.joinToString(", "),
                         "active_glasses_session" to (GlassesSessionCoordinator.currentSession()?.name ?: "none"),
@@ -8976,7 +8810,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         )
         AlertDialog.Builder(this)
             .setTitle("High-quality image unavailable")
-            .setMessage("$reason\n\nCyanBridge has not sent a preview automatically.")
+            .setMessage("$reason\n\nBlackVingadorre has not sent a preview automatically.")
             .setPositiveButton("Retry high quality") { _, _ ->
                 when (ImageQuestionSourcePolicy.resolveHighQualityFailure(HighQualityFailureChoice.RETRY_HIGH_QUALITY)) {
                     com.fersaiyan.cyanbridge.ai.image.ImageSourceResolution.HIGH_QUALITY -> {
@@ -9787,7 +9621,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
         }
         if (!downloadInitialPhaseCompleted) {
             maybeShowP2pSyncLogHelp(
-                reason = "CyanBridge failed during the initial P2P sync steps before any media transfer progress was shown. Error: $message",
+                reason = "BlackVingadorre failed during the initial P2P sync steps before any media transfer progress was shown. Error: $message",
             )
         }
         finishDownloadInitialPhase("error: $message")

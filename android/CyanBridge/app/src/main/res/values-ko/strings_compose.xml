@@ -16,7 +16,7 @@
     <string name="compose_external_setup_title">Gemini / ChatGPT 설정</string>
     <string name="compose_external_back">뒤로</string>
     <string name="compose_external_refresh_status">설정 상태 새로고침</string>
-    <string name="compose_external_description">CyanBridge는 Android 기본 어시스턴트를 따릅니다. Gemini 또는 ChatGPT를 선택하고 일치하는 Tasker 프로필을 가져온 다음 이미지 질문에 AutoInput을 사용 설정하세요.</string>
+    <string name="compose_external_description">BlackVingadorre는 Android 기본 어시스턴트를 따릅니다. Gemini 또는 ChatGPT를 선택하고 일치하는 Tasker 프로필을 가져온 다음 이미지 질문에 AutoInput을 사용 설정하세요.</string>
     <string name="compose_external_choose_assistant">기본 휴대전화 어시스턴트 선택</string>
     <string name="compose_external_import_profile">일치하는 Tasker 프로필 가져오기</string>
     <string name="compose_external_verify_profile">가져온 프로필 확인</string>
@@ -53,7 +53,7 @@
     <string name="compose_local_metadata_only">로컬 메타데이터만 사용하며 화면 텍스트는 여기에 저장하지 않습니다</string>
     <string name="compose_view">보기</string>
     <string name="compose_local_agent_telegram">Telegram 원격 제어</string>
-    <string name="compose_local_agent_telegram_description">기본적으로 꺼져 있습니다. CyanBridge는 이 포그라운드 리스너가 켜져 있을 때만 Telegram을 확인하며 아래의 정확한 채팅 ID에서 온 명령만 허용합니다. 비공개 채팅을 사용하세요. 그룹 채팅을 설정하면 모든 그룹 구성원이 명령에 접근할 수 있습니다.</string>
+    <string name="compose_local_agent_telegram_description">기본적으로 꺼져 있습니다. BlackVingadorre는 이 포그라운드 리스너가 켜져 있을 때만 Telegram을 확인하며 아래의 정확한 채팅 ID에서 온 명령만 허용합니다. 비공개 채팅을 사용하세요. 그룹 채팅을 설정하면 모든 그룹 구성원이 명령에 접근할 수 있습니다.</string>
     <string name="compose_telegram_bot_token">봇 토큰(암호화 저장)</string>
     <string name="compose_telegram_token_saved">토큰이 이미 저장됨</string>
     <string name="compose_telegram_token_placeholder">123456:token</string>
@@ -71,7 +71,7 @@
     <string name="compose_grant_access">액세스 허용</string>
     <string name="compose_shizuku_status">Shizuku 상태: %1$s</string>
     <string name="compose_local_agent_notification">알림 소리 내어 읽기</string>
-    <string name="compose_local_agent_notification_description">Android 알림 액세스를 사용하면 휴대전화가 잠금 해제된 동안 수신된 WhatsApp 알림 텍스트를 CyanBridge가 소리 내어 읽을 수 있습니다. WhatsApp 데이터베이스를 읽거나 휴대전화가 잠긴 동안 알림을 말하지 않습니다.</string>
+    <string name="compose_local_agent_notification_description">Android 알림 액세스를 사용하면 휴대전화가 잠금 해제된 동안 수신된 WhatsApp 알림 텍스트를 BlackVingadorre가 소리 내어 읽을 수 있습니다. WhatsApp 데이터베이스를 읽거나 휴대전화가 잠긴 동안 알림을 말하지 않습니다.</string>
     <string name="compose_notification_access">알림 액세스</string>
     <string name="compose_read_whatsapp_aloud">WhatsApp 알림 소리 내어 읽기</string>
     <string name="compose_action_status">상태</string>

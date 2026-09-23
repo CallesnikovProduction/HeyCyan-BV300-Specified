@@ -38,6 +38,12 @@ class LocalGenerationSettingsTest {
                 LocalGenerationSettings.PREVIOUS_DEFAULT_SYSTEM_PROMPT,
             ),
         )
+        assertEquals(
+            LocalGenerationSettings.DEFAULT_SYSTEM_PROMPT,
+            LocalGenerationSettings.migrateDefaultSystemPrompt(
+                LocalGenerationSettings.PREVIOUS_BRAND_DEFAULT_SYSTEM_PROMPT,
+            ),
+        )
         assertEquals("Custom prompt", LocalGenerationSettings.migrateDefaultSystemPrompt("Custom prompt"))
     }
 }

@@ -16,7 +16,7 @@ Ultima version: %2$s</string>
     <string name="compose_external_setup_title">Configuracion de Gemini / ChatGPT</string>
     <string name="compose_external_back">Atras</string>
     <string name="compose_external_refresh_status">Actualizar estado de configuracion</string>
-    <string name="compose_external_description">CyanBridge usa el asistente predeterminado de Android. Elige Gemini o ChatGPT, importa su perfil de Tasker y activa AutoInput para preguntas de imagen.</string>
+    <string name="compose_external_description">BlackVingadorre usa el asistente predeterminado de Android. Elige Gemini o ChatGPT, importa su perfil de Tasker y activa AutoInput para preguntas de imagen.</string>
     <string name="compose_external_choose_assistant">Elegir asistente predeterminado del telefono</string>
     <string name="compose_external_import_profile">Importar perfil de Tasker compatible</string>
     <string name="compose_external_verify_profile">Verificar perfil importado</string>
@@ -53,7 +53,7 @@ Ultima version: %2$s</string>
     <string name="compose_local_metadata_only">Solo metadatos locales; aqui no se guarda texto de pantalla</string>
     <string name="compose_view">Ver</string>
     <string name="compose_local_agent_telegram">Control remoto por Telegram</string>
-    <string name="compose_local_agent_telegram_description">Desactivado de forma predeterminada. CyanBridge consulta Telegram solo mientras este listener en primer plano esta activado y acepta comandos unicamente del ID de chat indicado abajo. Usa un chat privado: configurar un grupo concede acceso a todos sus miembros.</string>
+    <string name="compose_local_agent_telegram_description">Desactivado de forma predeterminada. BlackVingadorre consulta Telegram solo mientras este listener en primer plano esta activado y acepta comandos unicamente del ID de chat indicado abajo. Usa un chat privado: configurar un grupo concede acceso a todos sus miembros.</string>
     <string name="compose_telegram_bot_token">Token del bot (guardado cifrado)</string>
     <string name="compose_telegram_token_saved">Token ya guardado</string>
     <string name="compose_telegram_token_placeholder">123456:token</string>
@@ -71,7 +71,7 @@ Ultima version: %2$s</string>
     <string name="compose_grant_access">Conceder acceso</string>
     <string name="compose_shizuku_status">Estado de Shizuku: %1$s</string>
     <string name="compose_local_agent_notification">Leer notificaciones en voz alta</string>
-    <string name="compose_local_agent_notification_description">Con acceso a notificaciones, CyanBridge puede leer en voz alta el texto entrante de WhatsApp mientras el telefono esta desbloqueado. Nunca lee la base de datos de WhatsApp ni anuncia notificaciones con el telefono bloqueado.</string>
+    <string name="compose_local_agent_notification_description">Con acceso a notificaciones, BlackVingadorre puede leer en voz alta el texto entrante de WhatsApp mientras el telefono esta desbloqueado. Nunca lee la base de datos de WhatsApp ni anuncia notificaciones con el telefono bloqueado.</string>
     <string name="compose_notification_access">Acceso a notificaciones</string>
     <string name="compose_read_whatsapp_aloud">Leer notificaciones de WhatsApp en voz alta</string>
     <string name="compose_action_status">Estado</string>

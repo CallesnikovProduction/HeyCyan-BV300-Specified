@@ -1,134 +1,25 @@
-# Alternative HeyCyan App and SDK
+# BlackVingadorre
 
-This repository is the source workspace for CyanBridge's Android companion,
-HeyCyan vendor integration, and smart-glasses interoperability research.
+BlackVingadorre is a personal Android application for Blackview BV300 / MoYoung-compatible glasses. This repository is not a general-purpose smart-glasses SDK. The Android project lives in [`android/CyanBridge`](android/CyanBridge); its package and application ID retain the historical `com.fersaiyan.cyanbridge` name for compatibility.
 
-It is not a finished, drop-in SDK for every pair of glasses. The active product
-path is the Android app in [`android/CyanBridge`](android/CyanBridge). The rest
-of the repository includes vendor references, reusable modules, prototypes, and
-research needed to support more devices without hiding their limitations.
+The active path combines HeyCyan/MoYoung BLE connection and controls, Wi-Fi Direct media transfer, diagnostics, and a local assistant. The assistant can capture speech through the glasses, transcribe it with Vosk, answer with Gemma (including a fresh glasses image when requested), and speak through Supertonic to the BV300 audio route. Local chat, cancellation/barge-in, and background assistant operation are part of this path. Experimental tools remain in the app only where they support BV300 development or existing life-capture features.
 
-## Start here
+## Build
 
-| If you want to... | Start with... |
-| --- | --- |
-| Build or use the Android companion | [`android/CyanBridge/README.md`](android/CyanBridge/README.md) |
-| Connect and sync media from HeyCyan glasses | [`android/AGENTS.md`](android/AGENTS.md) |
-| Work on shared Android modules | [`heycyan-core/README.md`](heycyan-core/README.md) |
-
-## What CyanBridge does today
-
-### Android companion
-
-The Android app is the most complete part of this repository. It currently
-includes:
-
-- HeyCyan device scanning, pairing, connection management, and device state.
-- Media sync from compatible HeyCyan glasses: BLE starts transfer mode, Wi-Fi
-  Direct carries the files, and photos, videos, and supported recordings are
-  saved to Android media storage.
-- Local chat history, configurable local-model runtimes, and optional
-  OpenAI-compatible remote inference.
-- Meeting capture, transcription and summarization plumbing, notes, privacy
-  settings, data backup/export, and local-data cleanup controls.
-- A CyanBridge Model Studio bridge that can announce Studio session events and
-  handle its internal approval requests through TTS, speech recognition, and a
-  fail-closed allow/deny response.
-
-The app must be tested with real glasses before a device-specific feature is
-considered reliable.
-
-### Device and platform status
-
-| Area | Current status | Notes |
-| --- | --- | --- |
-| HeyCyan Android path | Active | BLE connection and the BLE plus Wi-Fi Direct media-transfer flow are the primary supported path. |
-| HeyCyan vendor controls | Device-dependent | The bundled vendor AAR exposes camera, recording, device-info, and media commands. Validate each command on physical hardware. |
-| CyanBridge local and remote chat | Included | The app contains local runtime support and an OpenAI-compatible remote-server option. Model availability depends on the phone and configuration. |
-| CyanBridge Model Studio bridge | Experimental | Relays Studio events and approval requests over an authenticated WebSocket. It is not a substitute for reviewing desktop work. |
-
-## Build the Android app
-
-Use Android Studio's bundled JDK or another Java 17+ JDK:
+Open `android/CyanBridge` in Android Studio with JDK 17 and the Android SDK installed, or run from that directory:
 
 ```bash
-cd android/CyanBridge
-JAVA_HOME=/opt/android-studio/jbr ./gradlew assembleDebug
+./gradlew :app:assembleDebug
 ```
 
-Run unit tests with:
+The APK is produced under `android/CyanBridge/app/build/outputs/apk/debug/`. Device behavior requires a physical phone and BV300 glasses; an APK build alone does not verify Bluetooth, camera, media transfer, or audio routing.
 
-```bash
-JAVA_HOME=/opt/android-studio/jbr ./gradlew testDebugUnitTest
-```
+## Where to look
 
-Android and shared-code CI runs on the local Linux Mint GitHub Actions runner.
-See [`docs/SELF_HOSTED_RUNNER.md`](docs/SELF_HOSTED_RUNNER.md) for the
-no-`sudo` runner service and maintenance commands.
+- [`android/CyanBridge/README.md`](android/CyanBridge/README.md): Android app structure and verification.
+- [`android/AGENTS.md`](android/AGENTS.md): confirmed BLE → Wi-Fi Direct media-transfer details.
+- [`WIFI_TRANSFER_ARCHITECTURE.md`](WIFI_TRANSFER_ARCHITECTURE.md): transfer design and protocol background.
+- [`heycyan-core/`](heycyan-core/): reusable Android connectivity and media modules.
+- `android/HeyCyanOfficialApp/`: vendor app reference for protocol research.
 
-For device integration, use a physical Android phone with Bluetooth and the
-required nearby-device, microphone, notification, and Wi-Fi permissions. The
-Android emulator cannot validate glasses pairing or media transfer.
-
-## How HeyCyan media sync works
-
-The supported transfer path is intentionally simple:
-
-1. Connect to the glasses over BLE.
-2. Ask the glasses to enter transfer mode and report their Wi-Fi address.
-3. Join the Wi-Fi Direct network.
-4. Read `http://<glasses-ip>/files/media.config`.
-5. Download each listed file from `http://<glasses-ip>/files/<filename>`.
-6. Store photos, videos, and compatible audio in Android media storage.
-
-See [`android/AGENTS.md`](android/AGENTS.md) for the confirmed command sequence,
-network-routing requirements, and audio-format caveats. Do not substitute the
-phone's Wi-Fi Direct group-owner address for the glasses address.
-
-## Repository map
-
-| Path | Purpose |
-| --- | --- |
-| `android/CyanBridge/` | CyanBridge Android app and the primary development target. |
-| `android/glasses_sdk_20250723_v01.aar` | Vendor Android SDK artifact used by the HeyCyan path. |
-| `android/HeyCyanOfficialApp/` | Decompiled vendor app used as protocol reference. |
-| `heycyan-core/` | Shared Android modules for BLE, connectivity, data, audio, and API boundaries. |
-| `WIFI_TRANSFER_ARCHITECTURE.md` | Historical technical background for the HeyCyan transfer design. |
-
-## Upstream projects and acknowledgements
-
-CyanBridge is made possible by the work of other open-source developers. Please
-visit these projects, star the repositories, follow their maintainers, and
-consider donating or sponsoring them through any support links in their
-repositories or profiles:
-
-| Project | How it contributed |
-| --- | --- |
-| [Meizu MYVU Client](https://github.com/Panny777/Meizu-Myvu-Client) by [Panny777](https://github.com/Panny777) | Hardware-verified MYVU / Star Air protocol client. Its BLE, ECDH, RFCOMM relay, heartbeat, and display transport are used by the native MYVU integration. |
-| [private-agent](https://github.com/orailnoor/private-agent) by [orailnoor](https://github.com/orailnoor) | Inspiration for CyanBridge's local-agent architecture, especially the Accessibility-based observe, decide, execute, and observe loop. |
-
-These projects remain independent works with their own licenses and
-maintainers. See each repository for its licensing, contribution, and support
-information. If you use or benefit from them, a star, a follow, a useful issue
-or pull request, and financial support where available are meaningful ways to
-give back.
-
-## Privacy and safety
-
-- Keep pairing, recording, transfer, and notification permissions explicit.
-- Review the app's privacy settings before enabling capture, transcription, or
-  desktop approval bridging.
-- The HeyCyan transfer server uses local HTTP over the direct device network;
-  do not expose it to an untrusted network.
-- Do not send unknown protocol commands or OTA payloads to personal hardware.
-- Treat experimental device adapters as research until they have repeatable,
-  documented hardware tests.
-
-## Vendor material and licensing
-
-The bundled `.aar`, decompiled vendor apps, firmware files,
-and protocol notes are not a promise that their underlying vendor components are
-open source or redistributable. Review the relevant vendor terms and applicable
-law before distributing, modifying, or using them outside personal research and
-development. This repository does not currently provide a single project-wide
-license for all included material.
+The bundled vendor artifacts and decompiled references may have separate licensing and redistribution restrictions. Review those terms before distributing the repository or an APK.

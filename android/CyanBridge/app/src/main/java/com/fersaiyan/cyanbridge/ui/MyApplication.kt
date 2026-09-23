@@ -19,7 +19,6 @@ import com.fersaiyan.cyanbridge.diagnostics.DiagnosticsStore
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderPrefs
 import com.fersaiyan.cyanbridge.ai.router.AiProviderType
-import com.fersaiyan.cyanbridge.analytics.ProductAnalyticsLifecycle
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import com.fersaiyan.cyanbridge.localagent.daily.DailyFactsReminderScheduler
 import com.fersaiyan.cyanbridge.localagent.daily.NightlyEnrichmentScheduler
@@ -67,7 +66,6 @@ class MyApplication : Application(){
         CONTEXT = applicationContext
         if (isLocalModelBenchmarkWorkerProcess()) return
         AppLanguagePreferences.applyStoredLocale(this)
-        ProductAnalyticsLifecycle.register(this)
         initBle()
 
         // Keep the BLE control channel connected while the app process is alive.

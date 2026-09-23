@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CyanBridge</string>
+    <string name="app_name">BlackVingadorre</string>
     <string name="language_system_default">Padrão do sistema</string>
     <string name="language_selection_title">Escolha o idioma do aplicativo</string>
     <string name="action_cancel">Cancelar</string>
@@ -25,14 +25,14 @@
     <string name="walking_aid_not_connected">Walking Aid: Óculos não conectados. Conecte seus óculos primeiro.</string>
     <string name="walking_aid_meeting_active">Walking Aid: Gravação de reunião ativa. Pare a reunião antes de ativar o Walking Aid.</string>
     <string name="onboarding_glasses_connection_title">Conecte seus óculos</string>
-    <string name="onboarding_glasses_connection_desc">Permita que o CyanBridge encontre e conecte seus óculos próximos.</string>
+    <string name="onboarding_glasses_connection_desc">Permita que o BlackVingadorre encontre e conecte seus óculos próximos.</string>
     <string name="onboarding_glasses_connection_details">A permissão Bluetooth é usada somente para encontrar, emparelhar e se comunicar com seus óculos. Você pode continuar sem permiti-la agora e concedê-la depois ao conectar um dispositivo.</string>
     <string name="onboarding_optional_features_title">Recursos opcionais, você escolhe</string>
     <string name="onboarding_optional_features_desc">AutoDiary, Auto Audio, Local Agent e os recursos Pro são opcionais e configurados em Plugins.</string>
     <string name="onboarding_optional_features_details">Comece conectando os óculos e explore Plugins quando quiser. Cada plugin explica o que faz e solicita apenas as permissões necessárias ao ser ativado. Você pode revisar ou desativar os recursos a qualquer momento.</string>
     <string name="onboarding_open_source_title">Desenvolvido abertamente</string>
-    <string name="onboarding_open_source_desc">Revise o código, relate problemas e ajude a melhorar o CyanBridge para todos.</string>
-    <string name="onboarding_open_source_details">O CyanBridge é open source. Consulte o código para entender seu comportamento, relate bugs ou problemas de segurança, sugira melhorias ou contribua pelo GitHub.</string>
+    <string name="onboarding_open_source_desc">Revise o código, relate problemas e ajude a melhorar o BlackVingadorre para todos.</string>
+    <string name="onboarding_open_source_details">O BlackVingadorre é open source. Consulte o código para entender seu comportamento, relate bugs ou problemas de segurança, sugira melhorias ou contribua pelo GitHub.</string>
     <string name="onboarding_skip_all">Pular tudo</string>
     <string name="onboarding_back">Voltar</string>
     <string name="onboarding_next">Avançar</string>
@@ -58,27 +58,27 @@
     <string name="text_17">Testar OTA no modo pull (writeIpToSoc)</string>
     <string name="scan_device">Escanear dispositivo</string>
 
-    <string name="battery_opt_title">Manter o CyanBridge em execução</string>
-    <string name="battery_opt_status_on">Status: a otimização de bateria está ATIVADA para o CyanBridge</string>
-    <string name="battery_opt_status_off">Status: a otimização de bateria está DESATIVADA para o CyanBridge</string>
-    <string name="battery_opt_body">Alguns celulares intermediários ou básicos podem desconectar dispositivos Bluetooth quando o CyanBridge está em segundo plano ou quando você fecha o aplicativo. Para manter seus óculos conectados, desative a otimização de bateria do CyanBridge.</string>
+    <string name="battery_opt_title">Manter o BlackVingadorre em execução</string>
+    <string name="battery_opt_status_on">Status: a otimização de bateria está ATIVADA para o BlackVingadorre</string>
+    <string name="battery_opt_status_off">Status: a otimização de bateria está DESATIVADA para o BlackVingadorre</string>
+    <string name="battery_opt_body">Alguns celulares intermediários ou básicos podem desconectar dispositivos Bluetooth quando o BlackVingadorre está em segundo plano ou quando você fecha o aplicativo. Para manter seus óculos conectados, desative a otimização de bateria do BlackVingadorre.</string>
     <string name="battery_opt_disable_button">Desativar otimização de bateria</string>
     <string name="battery_opt_open_list_button">Abrir configurações de otimização de bateria</string>
     <string name="battery_opt_open_app_info_button">Abrir informações do aplicativo</string>
-    <string name="battery_opt_lock_app_title">Também bloquear o CyanBridge nos aplicativos recentes</string>
-    <string name="battery_opt_lock_app_body">Abra os aplicativos recentes, encontre o CyanBridge, use o menu do aplicativo (geralmente pressionando o ícone por alguns instantes ou tocando nele) e escolha Bloquear/Fixar/Manter aberto. Isso impede que o sistema encerre o aplicativo.</string>
+    <string name="battery_opt_lock_app_title">Também bloquear o BlackVingadorre nos aplicativos recentes</string>
+    <string name="battery_opt_lock_app_body">Abra os aplicativos recentes, encontre o BlackVingadorre, use o menu do aplicativo (geralmente pressionando o ícone por alguns instantes ou tocando nele) e escolha Bloquear/Fixar/Manter aberto. Isso impede que o sistema encerre o aplicativo.</string>
     <string name="battery_opt_done_button">Eu bloqueei</string>
     <string name="battery_opt_skip_button">Não mostrar novamente</string>
     <string name="battery_opt_still_on_toast">A otimização de bateria ainda parece estar ATIVADA. Desative-a e toque novamente em “Eu bloqueei”.</string>
     <string name="battery_opt_not_supported">As configurações de otimização de bateria não estão disponíveis nesta versão do Android.</string>
     <string name="battery_opt_cant_open_settings">Não foi possível abrir as configurações neste dispositivo.</string>
 
-    <string name="welcome_title">Boas-vindas ao CyanBridge</string>
+    <string name="welcome_title">Boas-vindas ao BlackVingadorre</string>
     <string name="welcome_body">Vamos configurar seus óculos inteligentes. Precisamos configurar algumas coisas para garantir uma conexão estável.</string>
     <string name="welcome_button">Iniciar configuração</string>
     <string name="app_lock_guide_title">Evitar limpeza da RAM</string>
-    <string name="app_lock_guide_body">O Android costuma fechar aplicativos executados em segundo plano para economizar RAM. Para evitar desconexões, bloqueie o CyanBridge no menu de aplicativos recentes.</string>
-    <string name="app_lock_guide_instructions">1. Deslize de baixo para cima (ou toque no botão quadrado) para ver os aplicativos recentes.\n2. Encontre o CyanBridge.\n3. Toque no ícone na parte superior ou mantenha a prévia pressionada.\n4. Selecione “Bloquear este aplicativo” ou o ícone de bloqueio.</string>
+    <string name="app_lock_guide_body">O Android costuma fechar aplicativos executados em segundo plano para economizar RAM. Para evitar desconexões, bloqueie o BlackVingadorre no menu de aplicativos recentes.</string>
+    <string name="app_lock_guide_instructions">1. Deslize de baixo para cima (ou toque no botão quadrado) para ver os aplicativos recentes.\n2. Encontre o BlackVingadorre.\n3. Toque no ícone na parte superior ou mantenha a prévia pressionada.\n4. Selecione “Bloquear este aplicativo” ou o ícone de bloqueio.</string>
     <string name="app_lock_guide_button">Concluir configuração</string>
 
     <string name="local_agent_accessibility_service_label">Automação do agente local</string>
@@ -86,22 +86,22 @@
     <string name="local_agent_accessibility_description">Observador de tela do agente local (MVP)</string>
 
     <string name="onboarding_local_model_title">Escolha sua IA no dispositivo</string>
-    <string name="onboarding_local_model_desc">Escolha um modelo inicial. O CyanBridge fará o download em segundo plano enquanto você termina a configuração.</string>
+    <string name="onboarding_local_model_desc">Escolha um modelo inicial. O BlackVingadorre fará o download em segundo plano enquanto você termina a configuração.</string>
     <string name="onboarding_local_model_details">As configurações de geração são selecionadas automaticamente para o modelo, com preferência pela aceleração da GPU. Você poderá alterar ou importar modelos mais tarde em Modelos locais.</string>
     <string name="onboarding_daily_facts_title">Fatos diários e diário</string>
     <string name="onboarding_daily_facts_desc">O AutoDiary pode transformar o contexto de tela selecionado em fatos diários e resumos privados.</string>
-    <string name="onboarding_daily_facts_details">Ative e configure o AutoDiary mais tarde em Plugins. Ele pode lembrar você de revisar os fatos diários, criar resumos e manter suas configurações em um só lugar. O CyanBridge só solicita acesso às notificações quando você ativa um lembrete.</string>
+    <string name="onboarding_daily_facts_details">Ative e configure o AutoDiary mais tarde em Plugins. Ele pode lembrar você de revisar os fatos diários, criar resumos e manter suas configurações em um só lugar. O BlackVingadorre só solicita acesso às notificações quando você ativa um lembrete.</string>
     <string name="onboarding_screen_capture_title">Memória da tela</string>
     <string name="onboarding_screen_capture_desc">O AutoDiary pode ler o texto da tela para a memória local quando você ativá-lo em Plugins.</string>
     <string name="onboarding_screen_capture_details">O texto da tela é armazenado localmente para o AutoDiary. O controle do telefone pelo agente local lê a interface atual somente para as ações solicitadas explicitamente. Aplicativos na sua lista de bloqueio são ignorados. Leia a explicação sobre Acessibilidade abaixo antes de ativar este recurso opcional nas configurações do Android.</string>
     <string name="onboarding_accessibility_disclosure_title">Informações sobre o acesso à Acessibilidade</string>
-    <string name="onboarding_accessibility_disclosure_body">O CyanBridge usa a Acessibilidade do Android somente se você ativá-la. A Acessibilidade permite que o CyanBridge leia o texto e a estrutura da interface dos aplicativos na sua tela. Ela é usada para salvar a Memória da tela opcional e permitir que o agente local toque, digite, role e navegue em seu nome. O conteúdo da tela é armazenado localmente para a Memória da tela. Quando você solicita uma ação do agente local, o conteúdo atual da tela pode ser processado pelo provedor de IA escolhido, incluindo um provedor na nuvem se você tiver escolhido um. As capturas de tela opcionais do agente local exigem uma configuração separada e nunca são enviadas a um planejador remoto, a menos que você autorize separadamente o envio remoto de capturas de tela. Aplicativos na sua lista de bloqueio são ignorados. O CyanBridge não ativa a Acessibilidade automaticamente, e você pode desativar a Acessibilidade, a Memória da tela ou o agente local a qualquer momento.</string>
+    <string name="onboarding_accessibility_disclosure_body">O BlackVingadorre usa a Acessibilidade do Android somente se você ativá-la. A Acessibilidade permite que o BlackVingadorre leia o texto e a estrutura da interface dos aplicativos na sua tela. Ela é usada para salvar a Memória da tela opcional e permitir que o agente local toque, digite, role e navegue em seu nome. O conteúdo da tela é armazenado localmente para a Memória da tela. Quando você solicita uma ação do agente local, o conteúdo atual da tela pode ser processado pelo provedor de IA escolhido, incluindo um provedor na nuvem se você tiver escolhido um. As capturas de tela opcionais do agente local exigem uma configuração separada e nunca são enviadas a um planejador remoto, a menos que você autorize separadamente o envio remoto de capturas de tela. Aplicativos na sua lista de bloqueio são ignorados. O BlackVingadorre não ativa a Acessibilidade automaticamente, e você pode desativar a Acessibilidade, a Memória da tela ou o agente local a qualquer momento.</string>
     <string name="onboarding_local_agent_toggle">Ativar o controle do telefone pelo agente local</string>
     <string name="onboarding_open_accessibility_settings">Revisar e ativar a Acessibilidade</string>
 
     <string name="onboarding_audio_capture_title">Gravação contínua de áudio</string>
     <string name="onboarding_audio_capture_desc">O Auto Audio pode gravar o áudio dos óculos para transcrições e resumos diários quando ativado em Plugins.</string>
-    <string name="onboarding_audio_capture_details">O Auto Audio grava trechos de 15 minutos e depois os transcreve para resumos opcionais. Você pode revisar e excluir as gravações a qualquer momento. O CyanBridge explica e solicita acesso às notificações ou ao microfone somente se as opções escolhidas precisarem dessas permissões.</string>
+    <string name="onboarding_audio_capture_details">O Auto Audio grava trechos de 15 minutos e depois os transcreve para resumos opcionais. Você pode revisar e excluir as gravações a qualquer momento. O BlackVingadorre explica e solicita acesso às notificações ou ao microfone somente se as opções escolhidas precisarem dessas permissões.</string>
     <string name="onboarding_agent_personality_title">Personalize sua IA</string>
     <string name="onboarding_agent_personality_desc">Personalize o comportamento do assistente de IA e o que ele sabe sobre você.</string>
     <string name="onboarding_agent_personality_details">Você pode personalizar a personalidade do agente (como ele fala e seu tom) e fornecer informações sobre você (seu trabalho, hobbies, família e preferências). Isso torna a IA mais pessoal e útil. Você pode editar essas informações a qualquer momento em Configurações.</string>
@@ -124,14 +124,4 @@
     <string name="synced_media_video_badge">VÍDEO</string>
     <string name="auto_audio_speech_extend">Estender o loop quando a fala for detectada (para evitar cortar conversas)</string>
 
-    <string name="legacy_checkout_dialog_title">Nota de suporte do CyanBridge Pro</string>
-    <string name="legacy_checkout_dialog_message">Olá, obrigado pelo seu interesse na assinatura Pro. Trabalho neste projeto além dos meus estudos de doutorado, e seus comentários e apoio me motivam. Ainda não consegui configurar o Stripe devido aos requisitos especiais para empresas brasileiras, então por enquanto uso um processador de pagamentos chamado Asaas. Infelizmente, a página de checkout está em português, portanto use o Google Tradutor. Sei que isso é inconveniente e estou procurando ativamente uma alternativa melhor. Obrigado novamente pelo seu apoio!</string>
-    <string name="legacy_checkout_open_button">Abrir formulário de cartão Asaas</string>
-    <string name="legacy_checkout_return_title">Você terminou o formulário da Asaas?</string>
-    <string name="legacy_checkout_return_message">Se você concluiu o formulário seguro do cartão Asaas no navegador, toque em “Concluí o pagamento” e o CyanBridge verificará sua assinatura agora.</string>
-    <string name="legacy_checkout_confirm_button">Concluí o pagamento</string>
-    <string name="legacy_checkout_reopen_button">Abrir formulário de cartão novamente</string>
-    <string name="donation_intro_dialog_title">Nota de apoio ao CyanBridge via Asaas</string>
-    <string name="donation_intro_dialog_message">Olá, obrigado por considerar uma doação ao CyanBridge! Trabalho neste projeto além dos meus estudos de doutorado, e seu apoio significa muito para mim. Ainda não consegui configurar o Stripe devido aos requisitos especiais para empresas brasileiras, então por enquanto uso um processador de pagamentos chamado Asaas. A página de checkout está em português; use o Google Tradutor se necessário. Estou procurando ativamente uma alternativa melhor. Obrigado novamente pelo seu apoio!</string>
-    <string name="donation_intro_open_button">Abrir formulário de cartão Asaas</string>
 </resources>

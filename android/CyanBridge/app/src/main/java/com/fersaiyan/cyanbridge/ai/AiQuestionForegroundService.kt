@@ -133,7 +133,7 @@ class AiQuestionForegroundService : Service() {
         )
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("CyanBridge AI question")
+            .setContentTitle("BlackVingadorre AI question")
             .setContentText(status)
             .setContentIntent(openApp)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)

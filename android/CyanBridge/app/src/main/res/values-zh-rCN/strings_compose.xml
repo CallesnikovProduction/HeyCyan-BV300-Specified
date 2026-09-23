@@ -16,7 +16,7 @@
     <string name="compose_external_setup_title">Gemini / ChatGPT 设置</string>
     <string name="compose_external_back">返回</string>
     <string name="compose_external_refresh_status">刷新设置状态</string>
-    <string name="compose_external_description">CyanBridge 遵循 Android 默认助手。选择 Gemini 或 ChatGPT，导入匹配的 Tasker 配置文件，并启用 AutoInput 来处理图像问题。</string>
+    <string name="compose_external_description">BlackVingadorre 遵循 Android 默认助手。选择 Gemini 或 ChatGPT，导入匹配的 Tasker 配置文件，并启用 AutoInput 来处理图像问题。</string>
     <string name="compose_external_choose_assistant">选择默认手机助手</string>
     <string name="compose_external_import_profile">导入匹配的 Tasker 配置文件</string>
     <string name="compose_external_verify_profile">验证已导入配置文件</string>
@@ -53,7 +53,7 @@
     <string name="compose_local_metadata_only">仅本地元数据；这里不会保存屏幕文本</string>
     <string name="compose_view">查看</string>
     <string name="compose_local_agent_telegram">Telegram 远程控制</string>
-    <string name="compose_local_agent_telegram_description">默认关闭。只有前台监听器启用时 CyanBridge 才会轮询 Telegram，并且只接受下方确切聊天 ID 发来的命令。请使用私聊：配置群聊会让所有群成员都能访问这些命令。</string>
+    <string name="compose_local_agent_telegram_description">默认关闭。只有前台监听器启用时 BlackVingadorre 才会轮询 Telegram，并且只接受下方确切聊天 ID 发来的命令。请使用私聊：配置群聊会让所有群成员都能访问这些命令。</string>
     <string name="compose_telegram_bot_token">机器人令牌（加密存储）</string>
     <string name="compose_telegram_token_saved">令牌已保存</string>
     <string name="compose_telegram_token_placeholder">123456:token</string>
@@ -71,7 +71,7 @@
     <string name="compose_grant_access">授予访问权限</string>
     <string name="compose_shizuku_status">Shizuku 状态：%1$s</string>
     <string name="compose_local_agent_notification">朗读通知</string>
-    <string name="compose_local_agent_notification_description">获得通知访问权限后，CyanBridge 可以在手机解锁时朗读收到的 WhatsApp 通知文本。它不会读取 WhatsApp 数据库，也不会在手机锁定时播报通知。</string>
+    <string name="compose_local_agent_notification_description">获得通知访问权限后，BlackVingadorre 可以在手机解锁时朗读收到的 WhatsApp 通知文本。它不会读取 WhatsApp 数据库，也不会在手机锁定时播报通知。</string>
     <string name="compose_notification_access">通知访问权限</string>
     <string name="compose_read_whatsapp_aloud">朗读 WhatsApp 通知</string>
     <string name="compose_action_status">状态</string>

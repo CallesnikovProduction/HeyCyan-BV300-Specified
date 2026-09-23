@@ -20,7 +20,7 @@
     <string name="compose_status">状态：%1$s</string>
     <string name="compose_ready">就绪</string>
     <string name="compose_auto_audio_stop_loop">停止循环</string>
-    <string name="compose_autodiary_description">根据屏幕上下文和对话构建私密的每日记忆。屏幕捕获需要 CyanBridge 无障碍服务；Local Agent 手机控制可以保持关闭。</string>
+    <string name="compose_autodiary_description">根据屏幕上下文和对话构建私密的每日记忆。屏幕捕获需要 BlackVingadorre 无障碍服务；Local Agent 手机控制可以保持关闭。</string>
     <string name="compose_screen_capture">屏幕捕获</string>
     <string name="compose_autodiary_accessibility_enabled">无障碍服务已启用。AutoDiary 可以收集屏幕上下文。</string>
     <string name="compose_autodiary_paused">AutoDiary 已暂停。启用无障碍服务以恢复屏幕捕获。</string>

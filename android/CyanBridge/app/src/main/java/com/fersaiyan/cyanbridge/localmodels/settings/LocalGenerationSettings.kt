@@ -77,14 +77,21 @@ data class LocalGenerationSettings(
          * Request-specific visual grounding belongs to the caller so image
          * turns can preserve the user's task without a generic description cue.
          */
-        const val DEFAULT_SYSTEM_PROMPT =
+        internal const val PREVIOUS_BRAND_DEFAULT_SYSTEM_PROMPT =
             "You are CyanBridge's assistant. Answer the user's actual request directly and naturally. " +
+                "Use only an image attached to the current request as visual context, and use it to do the task the user asked for. " +
+                "Without a current image, do not claim to see the user's surroundings."
+
+        const val DEFAULT_SYSTEM_PROMPT =
+            "You are BlackVingadorre's assistant. Answer the user's actual request directly and naturally. " +
                 "Use only an image attached to the current request as visual context, and use it to do the task the user asked for. " +
                 "Without a current image, do not claim to see the user's surroundings."
 
         fun migrateDefaultSystemPrompt(prompt: String): String =
             when (prompt.trim()) {
-                LEGACY_EIGHT_WORD_SYSTEM_PROMPT, PREVIOUS_DEFAULT_SYSTEM_PROMPT -> DEFAULT_SYSTEM_PROMPT
+                LEGACY_EIGHT_WORD_SYSTEM_PROMPT,
+                PREVIOUS_DEFAULT_SYSTEM_PROMPT,
+                PREVIOUS_BRAND_DEFAULT_SYSTEM_PROMPT -> DEFAULT_SYSTEM_PROMPT
                 else -> prompt
             }
 

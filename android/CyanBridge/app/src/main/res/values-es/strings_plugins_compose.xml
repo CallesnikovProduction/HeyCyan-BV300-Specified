@@ -20,7 +20,7 @@
     <string name="compose_status">Estado: %1$s</string>
     <string name="compose_ready">Listo</string>
     <string name="compose_auto_audio_stop_loop">Detener bucle</string>
-    <string name="compose_autodiary_description">Crea una memoria diaria privada a partir del contexto de pantalla y las conversaciones. La captura de pantalla requiere el servicio de accesibilidad de CyanBridge; el control del telefono por Local Agent puede permanecer desactivado.</string>
+    <string name="compose_autodiary_description">Crea una memoria diaria privada a partir del contexto de pantalla y las conversaciones. La captura de pantalla requiere el servicio de accesibilidad de BlackVingadorre; el control del telefono por Local Agent puede permanecer desactivado.</string>
     <string name="compose_screen_capture">Captura de pantalla</string>
     <string name="compose_autodiary_accessibility_enabled">Servicio de accesibilidad activado. AutoDiary puede recopilar contexto de pantalla.</string>
     <string name="compose_autodiary_paused">AutoDiary esta pausado. Activa el servicio de accesibilidad para reanudar la captura.</string>

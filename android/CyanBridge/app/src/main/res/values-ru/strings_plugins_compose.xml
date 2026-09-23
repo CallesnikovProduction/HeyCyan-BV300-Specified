@@ -20,7 +20,7 @@
     <string name="compose_status">Состояние: %1$s</string>
     <string name="compose_ready">Готово</string>
     <string name="compose_auto_audio_stop_loop">Остановить цикл</string>
-    <string name="compose_autodiary_description">Создавайте приватную ежедневную память из контекста экрана и разговоров. Для снимков экрана требуется служба специальных возможностей CyanBridge; управление телефоном через Local Agent можно оставить выключенным.</string>
+    <string name="compose_autodiary_description">Создавайте приватную ежедневную память из контекста экрана и разговоров. Для снимков экрана требуется служба специальных возможностей BlackVingadorre; управление телефоном через Local Agent можно оставить выключенным.</string>
     <string name="compose_screen_capture">Снимок экрана</string>
     <string name="compose_autodiary_accessibility_enabled">Служба специальных возможностей включена. AutoDiary может собирать контекст экрана.</string>
     <string name="compose_autodiary_paused">AutoDiary приостановлен. Включите службу специальных возможностей, чтобы продолжить съемку.</string>

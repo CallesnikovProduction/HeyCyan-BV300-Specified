@@ -20,7 +20,7 @@
     <string name="compose_status">상태: %1$s</string>
     <string name="compose_ready">준비됨</string>
     <string name="compose_auto_audio_stop_loop">루프 중지</string>
-    <string name="compose_autodiary_description">화면 맥락과 대화에서 비공개 일일 메모리를 만듭니다. 화면 캡처에는 CyanBridge 접근성 서비스가 필요하며 Local Agent 전화 제어는 꺼둘 수 있습니다.</string>
+    <string name="compose_autodiary_description">화면 맥락과 대화에서 비공개 일일 메모리를 만듭니다. 화면 캡처에는 BlackVingadorre 접근성 서비스가 필요하며 Local Agent 전화 제어는 꺼둘 수 있습니다.</string>
     <string name="compose_screen_capture">화면 캡처</string>
     <string name="compose_autodiary_accessibility_enabled">접근성 서비스가 사용 설정됨. AutoDiary가 화면 맥락을 수집할 수 있습니다.</string>
     <string name="compose_autodiary_paused">AutoDiary가 일시중지되었습니다. 화면 캡처를 재개하려면 접근성 서비스를 사용 설정하세요.</string>

@@ -20,7 +20,7 @@
     <string name="compose_status">Status: %1$s</string>
     <string name="compose_ready">Bereit</string>
     <string name="compose_auto_audio_stop_loop">Schleife stoppen</string>
-    <string name="compose_autodiary_description">Erstellen Sie aus Bildschirmkontext und Gesprächen eine private tägliche Erinnerung. Bildschirmaufnahme benötigt die CyanBridge-Bedienungshilfe; die Telefonsteuerung von Local Agent kann deaktiviert bleiben.</string>
+    <string name="compose_autodiary_description">Erstellen Sie aus Bildschirmkontext und Gesprächen eine private tägliche Erinnerung. Bildschirmaufnahme benötigt die BlackVingadorre-Bedienungshilfe; die Telefonsteuerung von Local Agent kann deaktiviert bleiben.</string>
     <string name="compose_screen_capture">Bildschirmaufnahme</string>
     <string name="compose_autodiary_accessibility_enabled">Bedienungshilfe aktiviert. AutoDiary kann Bildschirmkontext erfassen.</string>
     <string name="compose_autodiary_paused">AutoDiary ist pausiert. Aktivieren Sie die Bedienungshilfe, um die Bildschirmaufnahme fortzusetzen.</string>

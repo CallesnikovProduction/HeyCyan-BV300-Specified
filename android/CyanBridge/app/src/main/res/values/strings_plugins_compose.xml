@@ -20,7 +20,7 @@
     <string name="compose_status">Status: %1$s</string>
     <string name="compose_ready">Ready</string>
     <string name="compose_auto_audio_stop_loop">Stop loop</string>
-    <string name="compose_autodiary_description">Build a private daily memory from screen context and conversations. Screen capture requires the CyanBridge accessibility service; Local Agent phone control can remain off.</string>
+    <string name="compose_autodiary_description">Build a private daily memory from screen context and conversations. Screen capture requires the BlackVingadorre accessibility service; Local Agent phone control can remain off.</string>
     <string name="compose_screen_capture">Screen capture</string>
     <string name="compose_autodiary_accessibility_enabled">Accessibility service enabled. AutoDiary can collect screen context.</string>
     <string name="compose_autodiary_paused">AutoDiary is paused. Enable the accessibility service to resume screen capture.</string>

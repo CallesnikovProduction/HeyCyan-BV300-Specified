@@ -16,7 +16,7 @@
     <string name="compose_external_setup_title">Настройка Gemini / ChatGPT</string>
     <string name="compose_external_back">Назад</string>
     <string name="compose_external_refresh_status">Обновить состояние настройки</string>
-    <string name="compose_external_description">CyanBridge использует стандартного ассистента Android. Выберите Gemini или ChatGPT, импортируйте соответствующий профиль Tasker и включите AutoInput для вопросов об изображениях.</string>
+    <string name="compose_external_description">BlackVingadorre использует стандартного ассистента Android. Выберите Gemini или ChatGPT, импортируйте соответствующий профиль Tasker и включите AutoInput для вопросов об изображениях.</string>
     <string name="compose_external_choose_assistant">Выбрать ассистента телефона по умолчанию</string>
     <string name="compose_external_import_profile">Импортировать профиль Tasker</string>
     <string name="compose_external_verify_profile">Проверить импортированный профиль</string>
@@ -53,7 +53,7 @@
     <string name="compose_local_metadata_only">Только локальные метаданные; текст экрана здесь не сохраняется</string>
     <string name="compose_view">Просмотр</string>
     <string name="compose_local_agent_telegram">Удаленное управление через Telegram</string>
-    <string name="compose_local_agent_telegram_description">По умолчанию выключено. CyanBridge опрашивает Telegram только пока этот слушатель переднего плана включен и принимает команды только от указанного ниже точного ID чата. Используйте личный чат: групповой чат предоставит доступ всем его участникам.</string>
+    <string name="compose_local_agent_telegram_description">По умолчанию выключено. BlackVingadorre опрашивает Telegram только пока этот слушатель переднего плана включен и принимает команды только от указанного ниже точного ID чата. Используйте личный чат: групповой чат предоставит доступ всем его участникам.</string>
     <string name="compose_telegram_bot_token">Токен бота (хранится в зашифрованном виде)</string>
     <string name="compose_telegram_token_saved">Токен уже сохранен</string>
     <string name="compose_telegram_token_placeholder">123456:token</string>
@@ -71,7 +71,7 @@
     <string name="compose_grant_access">Предоставить доступ</string>
     <string name="compose_shizuku_status">Состояние Shizuku: %1$s</string>
     <string name="compose_local_agent_notification">Чтение уведомлений вслух</string>
-    <string name="compose_local_agent_notification_description">При доступе к уведомлениям CyanBridge может читать вслух входящий текст уведомлений WhatsApp, пока телефон разблокирован. База данных WhatsApp не читается, а уведомления на заблокированном телефоне не объявляются.</string>
+    <string name="compose_local_agent_notification_description">При доступе к уведомлениям BlackVingadorre может читать вслух входящий текст уведомлений WhatsApp, пока телефон разблокирован. База данных WhatsApp не читается, а уведомления на заблокированном телефоне не объявляются.</string>
     <string name="compose_notification_access">Доступ к уведомлениям</string>
     <string name="compose_read_whatsapp_aloud">Читать уведомления WhatsApp вслух</string>
     <string name="compose_action_status">Состояние</string>

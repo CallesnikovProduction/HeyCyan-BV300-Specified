@@ -20,7 +20,7 @@
     <string name="compose_status">Statut : %1$s</string>
     <string name="compose_ready">Pret</string>
     <string name="compose_auto_audio_stop_loop">Arreter la boucle</string>
-    <string name="compose_autodiary_description">Construisez une memoire quotidienne privee a partir du contexte de l\'ecran et des conversations. La capture d\'ecran necessite le service d\'accessibilite CyanBridge ; le controle du telephone par Local Agent peut rester desactive.</string>
+    <string name="compose_autodiary_description">Construisez une memoire quotidienne privee a partir du contexte de l\'ecran et des conversations. La capture d\'ecran necessite le service d\'accessibilite BlackVingadorre ; le controle du telephone par Local Agent peut rester desactive.</string>
     <string name="compose_screen_capture">Capture d\'ecran</string>
     <string name="compose_autodiary_accessibility_enabled">Service d\'accessibilite active. AutoDiary peut recueillir le contexte de l\'ecran.</string>
     <string name="compose_autodiary_paused">AutoDiary est en pause. Activez le service d\'accessibilite pour reprendre la capture.</string>

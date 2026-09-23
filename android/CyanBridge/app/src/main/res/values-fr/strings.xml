@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CyanBridge</string>
+    <string name="app_name">BlackVingadorre</string>
     <string name="language_system_default">Paramètre système</string>
     <string name="language_selection_title">Choisir la langue de l\'application</string>
     <string name="action_cancel">Annuler</string>
@@ -25,14 +25,14 @@
     <string name="walking_aid_not_connected">Walking Aid : Lunettes non connectées. Veuillez d\'abord connecter vos lunettes.</string>
     <string name="walking_aid_meeting_active">Walking Aid : Enregistrement de réunion actif. Arrêtez la réunion avant d\'activer Walking Aid.</string>
     <string name="onboarding_glasses_connection_title">Connecter vos lunettes</string>
-    <string name="onboarding_glasses_connection_desc">Autorisez CyanBridge à trouver et connecter vos lunettes à proximité.</string>
+    <string name="onboarding_glasses_connection_desc">Autorisez BlackVingadorre à trouver et connecter vos lunettes à proximité.</string>
     <string name="onboarding_glasses_connection_details">L\'autorisation Bluetooth sert uniquement à détecter, associer et communiquer avec vos lunettes. Vous pouvez continuer sans l\'autoriser maintenant et l\'accorder plus tard lors de la connexion d\'un appareil.</string>
     <string name="onboarding_optional_features_title">Fonctions facultatives, votre choix</string>
     <string name="onboarding_optional_features_desc">AutoDiary, Auto Audio, Local Agent et les fonctions Pro sont facultatifs et se configurent dans Plugins.</string>
     <string name="onboarding_optional_features_details">Commencez par connecter vos lunettes, puis explorez les plugins quand vous le souhaitez. Chaque plugin explique sa fonction et ne demande que les autorisations nécessaires à son activation. Vous pouvez revoir ou désactiver les fonctions à tout moment.</string>
     <string name="onboarding_open_source_title">Développé ouvertement</string>
-    <string name="onboarding_open_source_desc">Consultez le code, signalez les problèmes et aidez à améliorer CyanBridge pour tous.</string>
-    <string name="onboarding_open_source_details">CyanBridge est open source. Consultez le code pour comprendre son comportement, signalez les bugs ou problèmes de sécurité, proposez des améliorations ou contribuez via GitHub.</string>
+    <string name="onboarding_open_source_desc">Consultez le code, signalez les problèmes et aidez à améliorer BlackVingadorre pour tous.</string>
+    <string name="onboarding_open_source_details">BlackVingadorre est open source. Consultez le code pour comprendre son comportement, signalez les bugs ou problèmes de sécurité, proposez des améliorations ou contribuez via GitHub.</string>
     <string name="onboarding_skip_all">Tout ignorer</string>
     <string name="onboarding_back">Retour</string>
     <string name="onboarding_next">Suivant</string>
@@ -58,27 +58,27 @@
     <string name="text_17">Tester l\'OTA en mode pull (writeIpToSoc)</string>
     <string name="scan_device">Scanner l\'appareil</string>
 
-    <string name="battery_opt_title">Garder CyanBridge actif</string>
-    <string name="battery_opt_status_on">Statut : l\'optimisation de la batterie est ACTIVÉE pour CyanBridge</string>
-    <string name="battery_opt_status_off">Statut : l\'optimisation de la batterie est DÉSACTIVÉE pour CyanBridge</string>
-    <string name="battery_opt_body">Certains téléphones de milieu ou d\'entrée de gamme peuvent déconnecter les appareils Bluetooth lorsque CyanBridge est en arrière-plan ou lorsque vous fermez l\'application. Pour garder vos lunettes connectées, désactivez l\'optimisation de la batterie pour CyanBridge.</string>
+    <string name="battery_opt_title">Garder BlackVingadorre actif</string>
+    <string name="battery_opt_status_on">Statut : l\'optimisation de la batterie est ACTIVÉE pour BlackVingadorre</string>
+    <string name="battery_opt_status_off">Statut : l\'optimisation de la batterie est DÉSACTIVÉE pour BlackVingadorre</string>
+    <string name="battery_opt_body">Certains téléphones de milieu ou d\'entrée de gamme peuvent déconnecter les appareils Bluetooth lorsque BlackVingadorre est en arrière-plan ou lorsque vous fermez l\'application. Pour garder vos lunettes connectées, désactivez l\'optimisation de la batterie pour BlackVingadorre.</string>
     <string name="battery_opt_disable_button">Désactiver l\'optimisation de la batterie</string>
     <string name="battery_opt_open_list_button">Ouvrir les paramètres d\'optimisation de la batterie</string>
     <string name="battery_opt_open_app_info_button">Ouvrir les infos de l\'application</string>
-    <string name="battery_opt_lock_app_title">Verrouiller aussi CyanBridge dans les applications récentes</string>
-    <string name="battery_opt_lock_app_body">Ouvrez les applications récentes, trouvez CyanBridge, puis utilisez le menu de l\'application (souvent en appuyant longuement ou en touchant l\'icône) et choisissez Verrouiller/Épingler/Garder ouverte. Cela empêche le système de supprimer l\'application.</string>
+    <string name="battery_opt_lock_app_title">Verrouiller aussi BlackVingadorre dans les applications récentes</string>
+    <string name="battery_opt_lock_app_body">Ouvrez les applications récentes, trouvez BlackVingadorre, puis utilisez le menu de l\'application (souvent en appuyant longuement ou en touchant l\'icône) et choisissez Verrouiller/Épingler/Garder ouverte. Cela empêche le système de supprimer l\'application.</string>
     <string name="battery_opt_done_button">Je l\'ai verrouillée</string>
     <string name="battery_opt_skip_button">Ne plus afficher</string>
     <string name="battery_opt_still_on_toast">L\'optimisation de la batterie semble toujours ACTIVÉE. Désactivez-la, puis appuyez à nouveau sur « Je l\'ai verrouillée ».</string>
     <string name="battery_opt_not_supported">Les paramètres d\'optimisation de la batterie ne sont pas disponibles sur cette version d\'Android.</string>
     <string name="battery_opt_cant_open_settings">Impossible d\'ouvrir les paramètres sur cet appareil.</string>
 
-    <string name="welcome_title">Bienvenue dans CyanBridge</string>
+    <string name="welcome_title">Bienvenue dans BlackVingadorre</string>
     <string name="welcome_body">Configurons vos lunettes intelligentes. Nous devons configurer quelques éléments pour garantir une connexion stable.</string>
     <string name="welcome_button">Commencer la configuration</string>
     <string name="app_lock_guide_title">Empêcher le nettoyage de la RAM</string>
-    <string name="app_lock_guide_body">Android ferme souvent les applications exécutées en arrière-plan pour économiser la RAM. Pour éviter les déconnexions, veuillez verrouiller CyanBridge dans le menu des applications récentes.</string>
-    <string name="app_lock_guide_instructions">1. Balayez l\'écran vers le haut depuis le bas (ou appuyez sur le bouton carré) pour afficher les applications récentes.\n2. Trouvez CyanBridge.\n3. Appuyez sur l\'icône en haut ou appuyez longuement sur l\'aperçu.\n4. Sélectionnez « Verrouiller cette application » ou l\'icône de verrouillage.</string>
+    <string name="app_lock_guide_body">Android ferme souvent les applications exécutées en arrière-plan pour économiser la RAM. Pour éviter les déconnexions, veuillez verrouiller BlackVingadorre dans le menu des applications récentes.</string>
+    <string name="app_lock_guide_instructions">1. Balayez l\'écran vers le haut depuis le bas (ou appuyez sur le bouton carré) pour afficher les applications récentes.\n2. Trouvez BlackVingadorre.\n3. Appuyez sur l\'icône en haut ou appuyez longuement sur l\'aperçu.\n4. Sélectionnez « Verrouiller cette application » ou l\'icône de verrouillage.</string>
     <string name="app_lock_guide_button">Terminer la configuration</string>
 
     <string name="local_agent_accessibility_service_label">Automatisation de l\'agent local</string>
@@ -86,22 +86,22 @@
     <string name="local_agent_accessibility_description">Observateur d\'écran de l\'agent local (MVP)</string>
 
     <string name="onboarding_local_model_title">Choisir votre IA sur l\'appareil</string>
-    <string name="onboarding_local_model_desc">Choisissez un modèle de départ. CyanBridge le téléchargera en arrière-plan pendant que vous terminez la configuration.</string>
+    <string name="onboarding_local_model_desc">Choisissez un modèle de départ. BlackVingadorre le téléchargera en arrière-plan pendant que vous terminez la configuration.</string>
     <string name="onboarding_local_model_details">Les paramètres de génération sont sélectionnés automatiquement pour le modèle et l\'accélération GPU est privilégiée. Vous pourrez modifier ou importer des modèles plus tard dans Modèles locaux.</string>
     <string name="onboarding_daily_facts_title">Faits quotidiens et journal</string>
     <string name="onboarding_daily_facts_desc">AutoDiary peut transformer le contexte sélectionné à l\'écran en faits quotidiens et résumés privés.</string>
-    <string name="onboarding_daily_facts_details">Activez et configurez AutoDiary plus tard dans Plugins. Il peut vous rappeler de consulter les faits quotidiens, de créer des résumés et de garder vos paramètres au même endroit. CyanBridge ne demande l\'accès aux notifications que lorsque vous activez un rappel.</string>
+    <string name="onboarding_daily_facts_details">Activez et configurez AutoDiary plus tard dans Plugins. Il peut vous rappeler de consulter les faits quotidiens, de créer des résumés et de garder vos paramètres au même endroit. BlackVingadorre ne demande l\'accès aux notifications que lorsque vous activez un rappel.</string>
     <string name="onboarding_screen_capture_title">Mémoire d\'écran</string>
     <string name="onboarding_screen_capture_desc">AutoDiary peut lire le texte de l\'écran pour la mémoire locale lorsque vous l\'activez dans Plugins.</string>
     <string name="onboarding_screen_capture_details">Le texte de l\'écran est stocké localement pour AutoDiary. Le contrôle du téléphone par l\'agent local ne lit l\'interface actuelle que pour les actions que vous demandez explicitement. Les applications de votre liste noire sont ignorées. Consultez la déclaration d\'accessibilité ci-dessous avant d\'activer cette fonction facultative dans les paramètres Android.</string>
     <string name="onboarding_accessibility_disclosure_title">Déclaration relative à l\'accès à l\'accessibilité</string>
-    <string name="onboarding_accessibility_disclosure_body">CyanBridge utilise l\'accessibilité Android uniquement si vous l\'activez. L\'accessibilité permet à CyanBridge de lire le texte et la structure de l\'interface des applications affichées à l\'écran. Elle sert à enregistrer la mémoire d\'écran facultative et à permettre à l\'agent local d\'appuyer, de saisir du texte, de faire défiler et de naviguer à votre place. Le contenu de l\'écran est stocké localement pour la mémoire d\'écran. Lorsque vous demandez une action à l\'agent local, le contenu actuel de l\'écran peut être traité par le fournisseur d\'IA que vous avez sélectionné, y compris un fournisseur cloud si vous en avez choisi un. Les captures d\'écran facultatives de l\'agent local nécessitent un réglage distinct et ne sont jamais envoyées à un planificateur distant, sauf si vous autorisez séparément l\'envoi de captures d\'écran à distance. Les applications de votre liste noire sont ignorées. CyanBridge n\'active pas automatiquement l\'accessibilité, et vous pouvez désactiver l\'accessibilité, la mémoire d\'écran ou l\'agent local à tout moment.</string>
+    <string name="onboarding_accessibility_disclosure_body">BlackVingadorre utilise l\'accessibilité Android uniquement si vous l\'activez. L\'accessibilité permet à BlackVingadorre de lire le texte et la structure de l\'interface des applications affichées à l\'écran. Elle sert à enregistrer la mémoire d\'écran facultative et à permettre à l\'agent local d\'appuyer, de saisir du texte, de faire défiler et de naviguer à votre place. Le contenu de l\'écran est stocké localement pour la mémoire d\'écran. Lorsque vous demandez une action à l\'agent local, le contenu actuel de l\'écran peut être traité par le fournisseur d\'IA que vous avez sélectionné, y compris un fournisseur cloud si vous en avez choisi un. Les captures d\'écran facultatives de l\'agent local nécessitent un réglage distinct et ne sont jamais envoyées à un planificateur distant, sauf si vous autorisez séparément l\'envoi de captures d\'écran à distance. Les applications de votre liste noire sont ignorées. BlackVingadorre n\'active pas automatiquement l\'accessibilité, et vous pouvez désactiver l\'accessibilité, la mémoire d\'écran ou l\'agent local à tout moment.</string>
     <string name="onboarding_local_agent_toggle">Activer le contrôle du téléphone par l\'agent local</string>
     <string name="onboarding_open_accessibility_settings">Examiner et activer l\'accessibilité</string>
 
     <string name="onboarding_audio_capture_title">Enregistrement audio continu</string>
     <string name="onboarding_audio_capture_desc">Auto Audio peut enregistrer l\'audio des lunettes pour la transcription et les résumés quotidiens lorsqu\'il est activé dans Plugins.</string>
-    <string name="onboarding_audio_capture_details">Auto Audio enregistre des segments de 15 minutes, puis les transcrit pour des résumés facultatifs. Vous pouvez consulter et supprimer les enregistrements à tout moment. CyanBridge explique les accès nécessaires et ne demande l\'accès aux notifications ou au microphone que si les options choisies en ont besoin.</string>
+    <string name="onboarding_audio_capture_details">Auto Audio enregistre des segments de 15 minutes, puis les transcrit pour des résumés facultatifs. Vous pouvez consulter et supprimer les enregistrements à tout moment. BlackVingadorre explique les accès nécessaires et ne demande l\'accès aux notifications ou au microphone que si les options choisies en ont besoin.</string>
     <string name="onboarding_agent_personality_title">Personnaliser votre IA</string>
     <string name="onboarding_agent_personality_desc">Personnalisez le comportement de l\'assistant IA et ce qu\'il sait de vous.</string>
     <string name="onboarding_agent_personality_details">Vous pouvez personnaliser la personnalité de l\'agent (sa façon de parler et son ton) et fournir des informations sur vous (votre travail, vos loisirs, votre famille et vos préférences). Cela rend l\'IA plus personnelle et plus utile. Vous pouvez modifier ces informations à tout moment dans les paramètres.</string>
@@ -124,14 +124,4 @@
     <string name="synced_media_video_badge">VIDÉO</string>
     <string name="auto_audio_speech_extend">Prolonger la boucle lorsqu\'une voix est détectée (pour éviter de couper les conversations)</string>
 
-    <string name="legacy_checkout_dialog_title">Note d\'assistance CyanBridge Pro</string>
-    <string name="legacy_checkout_dialog_message">Bonjour, merci de votre intérêt pour l\'abonnement Pro. Je travaille sur ce projet en parallèle de mon doctorat, et vos commentaires et votre soutien me motivent. Je n\'ai pas encore pu configurer Stripe en raison de ses exigences particulières pour les entreprises brésiliennes. J\'utilise donc pour le moment un prestataire de paiement appelé Asaas. La page de paiement est malheureusement en portugais ; veuillez utiliser Google Traduction. Je sais que ce n\'est pas idéal et je cherche activement une meilleure solution. Merci encore pour votre soutien !</string>
-    <string name="legacy_checkout_open_button">Ouvrir le formulaire de carte Asaas</string>
-    <string name="legacy_checkout_return_title">Avez-vous terminé le formulaire Asaas ?</string>
-    <string name="legacy_checkout_return_message">Si vous avez rempli le formulaire sécurisé de carte Asaas dans le navigateur, appuyez sur « Paiement effectué » et CyanBridge vérifiera votre abonnement maintenant.</string>
-    <string name="legacy_checkout_confirm_button">Paiement effectué</string>
-    <string name="legacy_checkout_reopen_button">Rouvrir le formulaire de carte</string>
-    <string name="donation_intro_dialog_title">Note de soutien CyanBridge via Asaas</string>
-    <string name="donation_intro_dialog_message">Bonjour, merci d\'envisager un don à CyanBridge ! Je travaille sur ce projet en parallèle de mon doctorat, et votre soutien compte beaucoup pour moi. Je n\'ai pas encore pu configurer Stripe en raison de ses exigences particulières pour les entreprises brésiliennes. J\'utilise donc pour le moment un prestataire de paiement appelé Asaas. La page de paiement est en portugais ; utilisez Google Traduction si nécessaire. Je cherche activement une meilleure solution. Merci encore pour votre soutien !</string>
-    <string name="donation_intro_open_button">Ouvrir le formulaire de carte Asaas</string>
 </resources>

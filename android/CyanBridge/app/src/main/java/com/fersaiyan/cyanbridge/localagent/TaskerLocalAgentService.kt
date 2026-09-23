@@ -419,7 +419,7 @@ class TaskerLocalAgentService : Service() {
 
     private fun notification(content: String) = NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(R.mipmap.ic_launcher)
-        .setContentTitle("CyanBridge Local Agent")
+        .setContentTitle("BlackVingadorre Local Agent")
         .setContentText(content)
         .setOngoing(true)
         .setContentIntent(

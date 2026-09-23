@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CyanBridge</string>
+    <string name="app_name">BlackVingadorre</string>
     <string name="language_system_default">跟随系统</string>
     <string name="language_selection_title">选择应用语言</string>
     <string name="action_cancel">取消</string>
@@ -25,14 +25,14 @@
     <string name="walking_aid_not_connected">Walking Aid：眼镜未连接。请先连接您的眼镜。</string>
     <string name="walking_aid_meeting_active">Walking Aid：会议录音已激活。请在启用Walking Aid前停止会议。</string>
     <string name="onboarding_glasses_connection_title">连接眼镜</string>
-    <string name="onboarding_glasses_connection_desc">允许 CyanBridge 查找并连接附近的眼镜。</string>
+    <string name="onboarding_glasses_connection_desc">允许 BlackVingadorre 查找并连接附近的眼镜。</string>
     <string name="onboarding_glasses_connection_details">蓝牙权限仅用于发现、配对和与眼镜通信。您可以现在不允许，稍后连接设备时再授予权限。</string>
     <string name="onboarding_optional_features_title">可选功能，由您选择</string>
     <string name="onboarding_optional_features_desc">AutoDiary、Auto Audio、Local Agent 和 Pro 功能都是可选的，可在插件中配置。</string>
     <string name="onboarding_optional_features_details">先连接眼镜，然后在准备好时探索插件。每个插件都会说明功能，并在启用时只请求所需权限。您可以随时查看或关闭功能。</string>
     <string name="onboarding_open_source_title">坚持开源</string>
-    <string name="onboarding_open_source_desc">查看代码、报告问题并帮助改进 CyanBridge。</string>
-    <string name="onboarding_open_source_details">CyanBridge 是开源项目。您可以查看代码了解行为，报告错误或安全问题，提出改进建议，或通过 GitHub 贡献代码。</string>
+    <string name="onboarding_open_source_desc">查看代码、报告问题并帮助改进 BlackVingadorre。</string>
+    <string name="onboarding_open_source_details">BlackVingadorre 是开源项目。您可以查看代码了解行为，报告错误或安全问题，提出改进建议，或通过 GitHub 贡献代码。</string>
     <string name="onboarding_skip_all">全部跳过</string>
     <string name="onboarding_back">返回</string>
     <string name="onboarding_next">下一步</string>
@@ -58,27 +58,27 @@
     <string name="text_17">测试拉取模式 OTA (writeIpToSoc)</string>
     <string name="scan_device">扫描设备</string>
 
-    <string name="battery_opt_title">保持 CyanBridge 运行</string>
-    <string name="battery_opt_status_on">状态：CyanBridge 的电池优化已开启</string>
-    <string name="battery_opt_status_off">状态：CyanBridge 的电池优化已关闭</string>
-    <string name="battery_opt_body">某些中低端手机可能会在 CyanBridge 在后台运行或您关闭应用时断开蓝牙设备。要保持眼镜连接，请关闭 CyanBridge 的电池优化。</string>
+    <string name="battery_opt_title">保持 BlackVingadorre 运行</string>
+    <string name="battery_opt_status_on">状态：BlackVingadorre 的电池优化已开启</string>
+    <string name="battery_opt_status_off">状态：BlackVingadorre 的电池优化已关闭</string>
+    <string name="battery_opt_body">某些中低端手机可能会在 BlackVingadorre 在后台运行或您关闭应用时断开蓝牙设备。要保持眼镜连接，请关闭 BlackVingadorre 的电池优化。</string>
     <string name="battery_opt_disable_button">关闭电池优化</string>
     <string name="battery_opt_open_list_button">打开电池优化设置</string>
     <string name="battery_opt_open_app_info_button">打开应用信息</string>
-    <string name="battery_opt_lock_app_title">同时在最近任务中锁定 CyanBridge</string>
-    <string name="battery_opt_lock_app_body">打开最近任务，找到 CyanBridge，然后使用应用菜单（通常长按或点按应用图标），选择“锁定/固定/保持打开”。这样可以防止系统清理应用。</string>
+    <string name="battery_opt_lock_app_title">同时在最近任务中锁定 BlackVingadorre</string>
+    <string name="battery_opt_lock_app_body">打开最近任务，找到 BlackVingadorre，然后使用应用菜单（通常长按或点按应用图标），选择“锁定/固定/保持打开”。这样可以防止系统清理应用。</string>
     <string name="battery_opt_done_button">我已锁定</string>
     <string name="battery_opt_skip_button">不再显示</string>
     <string name="battery_opt_still_on_toast">电池优化似乎仍处于开启状态。请先关闭它，然后再次点按“我已锁定”。</string>
     <string name="battery_opt_not_supported">此 Android 版本不提供电池优化设置。</string>
     <string name="battery_opt_cant_open_settings">无法在此设备上打开设置。</string>
 
-    <string name="welcome_title">欢迎使用 CyanBridge</string>
+    <string name="welcome_title">欢迎使用 BlackVingadorre</string>
     <string name="welcome_body">让我们开始设置智能眼镜。我们需要配置一些内容，以确保连接稳定。</string>
     <string name="welcome_button">开始设置</string>
     <string name="app_lock_guide_title">防止清理内存</string>
-    <string name="app_lock_guide_body">Android 经常关闭在后台运行的应用以节省内存。为了避免连接断开，请在最近任务菜单中锁定 CyanBridge。</string>
-    <string name="app_lock_guide_instructions">1. 从屏幕底部向上滑动（或点按方形按钮）以查看最近使用的应用。\n2. 找到 CyanBridge。\n3. 点按顶部的图标，或长按应用预览。\n4. 选择“锁定此应用”或锁定图标。</string>
+    <string name="app_lock_guide_body">Android 经常关闭在后台运行的应用以节省内存。为了避免连接断开，请在最近任务菜单中锁定 BlackVingadorre。</string>
+    <string name="app_lock_guide_instructions">1. 从屏幕底部向上滑动（或点按方形按钮）以查看最近使用的应用。\n2. 找到 BlackVingadorre。\n3. 点按顶部的图标，或长按应用预览。\n4. 选择“锁定此应用”或锁定图标。</string>
     <string name="app_lock_guide_button">完成设置</string>
 
     <string name="local_agent_accessibility_service_label">本地智能体自动化</string>
@@ -86,22 +86,22 @@
     <string name="local_agent_accessibility_description">本地智能体屏幕观察器（MVP）</string>
 
     <string name="onboarding_local_model_title">选择设备端 AI</string>
-    <string name="onboarding_local_model_desc">选择一个入门模型。CyanBridge 会在您完成设置期间于后台下载该模型。</string>
+    <string name="onboarding_local_model_desc">选择一个入门模型。BlackVingadorre 会在您完成设置期间于后台下载该模型。</string>
     <string name="onboarding_local_model_details">系统会根据模型自动选择生成设置，并优先使用 GPU 加速。以后可以在“本地模型”中更改或导入模型。</string>
     <string name="onboarding_daily_facts_title">每日事实与日记</string>
     <string name="onboarding_daily_facts_desc">AutoDiary 可以将选定的屏幕上下文转换为私密的每日事实和摘要。</string>
-    <string name="onboarding_daily_facts_details">稍后可以在“插件”中启用和配置 AutoDiary。它可以提醒您查看每日事实、创建摘要，并将设置集中管理。只有在您启用提醒时，CyanBridge 才会请求通知访问权限。</string>
+    <string name="onboarding_daily_facts_details">稍后可以在“插件”中启用和配置 AutoDiary。它可以提醒您查看每日事实、创建摘要，并将设置集中管理。只有在您启用提醒时，BlackVingadorre 才会请求通知访问权限。</string>
     <string name="onboarding_screen_capture_title">屏幕记忆</string>
     <string name="onboarding_screen_capture_desc">在“插件”中启用后，AutoDiary 可以读取屏幕文字，用于本地记忆。</string>
     <string name="onboarding_screen_capture_details">屏幕文字会在本地存储，用于 AutoDiary。本地智能体的手机控制功能只会为您明确请求的操作读取当前界面。黑名单中的应用会被跳过。在 Android 设置中启用此可选功能前，请先阅读下方的无障碍说明。</string>
     <string name="onboarding_accessibility_disclosure_title">无障碍访问说明</string>
-    <string name="onboarding_accessibility_disclosure_body">CyanBridge 仅在您启用后才会使用 Android 无障碍功能。无障碍功能允许 CyanBridge 读取屏幕上应用的文字和界面结构，用于保存可选的屏幕记忆，并让本地智能体代您点按、输入、滚动和导航。屏幕内容会在本地存储，用于屏幕记忆。当您请求本地智能体执行操作时，您当前的屏幕内容可能会由您选择的 AI 提供商处理；如果您选择了云端提供商，也可能由云端处理。本地智能体的可选屏幕截图需要单独设置，除非您另行允许远程上传，否则绝不会发送给远程规划器。黑名单中的应用会被跳过。CyanBridge 不会自动启用无障碍功能，您可以随时关闭无障碍功能、屏幕记忆或本地智能体。</string>
+    <string name="onboarding_accessibility_disclosure_body">BlackVingadorre 仅在您启用后才会使用 Android 无障碍功能。无障碍功能允许 BlackVingadorre 读取屏幕上应用的文字和界面结构，用于保存可选的屏幕记忆，并让本地智能体代您点按、输入、滚动和导航。屏幕内容会在本地存储，用于屏幕记忆。当您请求本地智能体执行操作时，您当前的屏幕内容可能会由您选择的 AI 提供商处理；如果您选择了云端提供商，也可能由云端处理。本地智能体的可选屏幕截图需要单独设置，除非您另行允许远程上传，否则绝不会发送给远程规划器。黑名单中的应用会被跳过。BlackVingadorre 不会自动启用无障碍功能，您可以随时关闭无障碍功能、屏幕记忆或本地智能体。</string>
     <string name="onboarding_local_agent_toggle">启用本地智能体手机控制</string>
     <string name="onboarding_open_accessibility_settings">查看并启用无障碍功能</string>
 
     <string name="onboarding_audio_capture_title">连续音频录制</string>
     <string name="onboarding_audio_capture_desc">在“插件”中启用后，Auto Audio 可以录制眼镜音频，用于转录和每日摘要。</string>
-    <string name="onboarding_audio_capture_details">Auto Audio 会录制 15 分钟的片段，然后将其转录为可选摘要。您可以随时查看和删除录音。只有在您选择的选项需要时，CyanBridge 才会说明并请求通知或麦克风访问权限。</string>
+    <string name="onboarding_audio_capture_details">Auto Audio 会录制 15 分钟的片段，然后将其转录为可选摘要。您可以随时查看和删除录音。只有在您选择的选项需要时，BlackVingadorre 才会说明并请求通知或麦克风访问权限。</string>
     <string name="onboarding_agent_personality_title">个性化您的 AI</string>
     <string name="onboarding_agent_personality_desc">自定义 AI 助手的行为方式以及它对您的了解。</string>
     <string name="onboarding_agent_personality_details">您可以自定义智能体的个性（说话方式和语气），并提供自己的信息（工作、爱好、家庭和偏好）。这样可以让 AI 更加个性化、更有帮助。您可以随时在设置中编辑这些内容。</string>
@@ -124,14 +124,4 @@
     <string name="synced_media_video_badge">视频</string>
     <string name="auto_audio_speech_extend">检测到语音时延长循环（避免中断对话）</string>
 
-    <string name="legacy_checkout_dialog_title">CyanBridge Pro 支持说明</string>
-    <string name="legacy_checkout_dialog_message">您好，感谢您对 Pro 订阅感兴趣。我在攻读博士的同时维护这个项目，您的反馈和支持给了我很大动力。由于巴西企业有特殊要求，我还没能配置 Stripe，因此目前使用名为 Asaas 的支付处理商。结账页面很遗憾是葡萄牙语，请使用 Google 翻译。我知道这不太方便，也正在积极寻找更好的替代方案。再次感谢您的支持！</string>
-    <string name="legacy_checkout_open_button">打开 Asaas 银行卡表单</string>
-    <string name="legacy_checkout_return_title">您完成 Asaas 表单了吗？</string>
-    <string name="legacy_checkout_return_message">如果您已在浏览器中完成安全的 Asaas 银行卡表单，请点按“我已完成付款”，CyanBridge 将立即验证您的订阅。</string>
-    <string name="legacy_checkout_confirm_button">我已完成付款</string>
-    <string name="legacy_checkout_reopen_button">再次打开银行卡表单</string>
-    <string name="donation_intro_dialog_title">CyanBridge Asaas 支持说明</string>
-    <string name="donation_intro_dialog_message">您好，感谢您考虑向 CyanBridge 捐赠！我在攻读博士的同时维护这个项目，您的支持对我意义重大。由于巴西企业有特殊要求，我还没能配置 Stripe，因此目前使用名为 Asaas 的支付处理商。结账页面是葡萄牙语，如有需要请使用 Google 翻译。我正在积极寻找更好的替代方案。再次感谢您的支持！</string>
-    <string name="donation_intro_open_button">打开 Asaas 银行卡表单</string>
 </resources>
