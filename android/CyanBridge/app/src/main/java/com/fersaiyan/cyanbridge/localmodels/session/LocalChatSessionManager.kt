@@ -6,6 +6,7 @@ import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
 import com.fersaiyan.cyanbridge.localmodels.engine.EngineLoadConfig
 import com.fersaiyan.cyanbridge.localmodels.engine.GenerationConfig
+import com.fersaiyan.cyanbridge.localmodels.engine.ConversationTurn
 import com.fersaiyan.cyanbridge.localmodels.engine.GenerationResult
 import com.fersaiyan.cyanbridge.localmodels.engine.LiteRtLocalInferenceEngine
 import com.fersaiyan.cyanbridge.localmodels.engine.LlamaCppLocalInferenceEngine
@@ -17,6 +18,7 @@ import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelRequestPriority
 import com.fersaiyan.cyanbridge.localmodels.storage.InstalledLocalModel
 import com.fersaiyan.cyanbridge.localmodels.storage.LocalModelStorageRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
@@ -96,7 +98,8 @@ object LocalChatSessionManager {
         catalogEntry: LocalModelCatalogEntry?,
         settings: LocalGenerationSettings,
     ): LocalModelLoadDetails {
-        return mutex.withLock {
+        // A native Engine must not be closed or replaced while generateInternal owns it.
+        return generationMutex.withLock { mutex.withLock modelStateLock@{
             Log.i(
                 TAG,
                 "ensureModelLoaded model=${model.displayName} runtime=${settings.modelRuntime} backend=${settings.computeBackend} context=${settings.contextSize} gpuLayers=${settings.gpuLayers}",
@@ -156,7 +159,7 @@ object LocalChatSessionManager {
                 isEngineCompatibleWithRuntime(settings.modelRuntime)
             ) {
                 state = LocalSessionState.Ready(model.id)
-                return@withLock LocalModelLoadDetails(
+                return@modelStateLock LocalModelLoadDetails(
                     activeBackend = activeBackend ?: settings.computeBackend,
                     activeGpuLayers = if (activeBackend == LocalComputeBackend.GPU || activeBackend == LocalComputeBackend.NPU_EXPERIMENTAL) {
                         activeGpuLayers
@@ -183,6 +186,12 @@ object LocalChatSessionManager {
             }.onFailure {
                 Log.e(TAG, "Failed to load local model ${model.displayName}", it)
                 state = LocalSessionState.Error(it.message ?: "Failed to load local model")
+                loadedModelId = null
+                loadedModelPath = null
+                loadedConfig = null
+                activeBackend = null
+                activeGpuLayers = 0
+                gpuFallbackMessage = null
                 throw it
             }.onSuccess { loadResult ->
                 Log.i(
@@ -199,7 +208,7 @@ object LocalChatSessionManager {
             loadedConfig = loadConfig
             state = LocalSessionState.Ready(model.id)
 
-            return@withLock LocalModelLoadDetails(
+            return@modelStateLock LocalModelLoadDetails(
                 activeBackend = activeBackend ?: settings.computeBackend,
                 activeGpuLayers = if (activeBackend == LocalComputeBackend.GPU || activeBackend == LocalComputeBackend.NPU_EXPERIMENTAL) {
                     activeGpuLayers
@@ -208,7 +217,7 @@ object LocalChatSessionManager {
                 },
                 fallbackReason = gpuFallbackMessage,
             )
-        }
+        } }
     }
 
     suspend fun streamGenerate(
@@ -219,6 +228,9 @@ object LocalChatSessionManager {
         audioPath: String? = null,
         requestPriority: LocalModelRequestPriority = LocalModelRequestPriority.HIGH,
         maxTokensOverride: Int? = null,
+        conversationId: String? = null,
+        systemInstruction: String? = null,
+        initialMessages: List<ConversationTurn> = emptyList(),
     ): String {
         return generateInternal(
             settings = settings,
@@ -228,6 +240,9 @@ object LocalChatSessionManager {
             audioPath = audioPath,
             requestPriority = requestPriority,
             maxTokensOverride = maxTokensOverride,
+            conversationId = conversationId,
+            systemInstruction = systemInstruction,
+            initialMessages = initialMessages,
         ).text
     }
 
@@ -245,6 +260,9 @@ object LocalChatSessionManager {
         audioPath: String?,
         requestPriority: LocalModelRequestPriority,
         maxTokensOverride: Int? = null,
+        conversationId: String? = null,
+        systemInstruction: String? = null,
+        initialMessages: List<ConversationTurn> = emptyList(),
     ): GenerationResult {
         val reqId = UUID.randomUUID().toString()
         val llm: LocalInferenceEngine
@@ -261,11 +279,6 @@ object LocalChatSessionManager {
             }
         }
 
-        mutex.withLock {
-            llm = engine ?: throw IllegalStateException("Local engine not initialized")
-            modelId = loadedModelId ?: throw IllegalStateException("No local model loaded")
-        }
-
         if (requestPriority == LocalModelRequestPriority.LOW) {
             waitForHighPriorityRequestsToDrain()
         }
@@ -274,6 +287,8 @@ object LocalChatSessionManager {
         try {
             return generationMutex.withLock {
                 mutex.withLock {
+                    llm = engine ?: throw IllegalStateException("Local engine not initialized")
+                    modelId = loadedModelId ?: throw IllegalStateException("No local model loaded")
                     if (requestPriority == LocalModelRequestPriority.HIGH) {
                         pendingHighPriorityRequests = (pendingHighPriorityRequests - 1).coerceAtLeast(0)
                         highPendingConsumed = true
@@ -287,6 +302,7 @@ object LocalChatSessionManager {
                 val result = runCatching {
                     withContext(Dispatchers.IO) {
                         val maxTokens = (maxTokensOverride ?: settings.maxTokens).coerceAtLeast(1)
+                        val nativeOutputLimit = llm is LiteRtLocalInferenceEngine
                         val streamedText = StringBuilder()
                         var approxGeneratedTokens = 0
                         var guardTriggered = false
@@ -305,6 +321,9 @@ object LocalChatSessionManager {
                                     structuredJson = settings.experimentalStructuredJson,
                                     imagePaths = imagePaths,
                                     audioPath = audioPath,
+                                    conversationId = conversationId,
+                                    systemInstruction = systemInstruction,
+                                    initialMessages = initialMessages,
                                 ),
                                 onToken = { chunk ->
                                     if (chunk.isBlank() || guardTriggered) return@generate
@@ -313,7 +332,7 @@ object LocalChatSessionManager {
                                     onToken(chunk)
 
                                     approxGeneratedTokens += estimateApproxTokens(chunk)
-                                    if (approxGeneratedTokens >= (maxTokens + TOKEN_GUARD_SAFETY_MARGIN)) {
+                                    if (!nativeOutputLimit && approxGeneratedTokens >= (maxTokens + TOKEN_GUARD_SAFETY_MARGIN)) {
                                         guardTriggered = true
                                         runCatching {
                                             runBlocking { llm.cancelGeneration() }
@@ -331,13 +350,13 @@ object LocalChatSessionManager {
                             raw?.text.orEmpty()
                         }
 
-                        val guardedText = truncateToApproxTokens(preferredText, maxTokens)
+                        val guardedText = if (nativeOutputLimit) preferredText else truncateToApproxTokens(preferredText, maxTokens)
                         val guardedTokenCount = (raw?.tokenCount ?: 0)
                             .coerceAtLeast(estimateApproxTokens(guardedText))
                             .coerceAtMost(maxTokens)
                         val capped = guardTriggered ||
                             guardedTokenCount >= maxTokens ||
-                            estimateApproxTokens(preferredText) > maxTokens ||
+                            (!nativeOutputLimit && estimateApproxTokens(preferredText) > maxTokens) ||
                             (raw?.cappedByMaxTokens == true)
 
                         GenerationResult(
@@ -348,28 +367,32 @@ object LocalChatSessionManager {
                     }
                 }
 
-                mutex.withLock {
-                    activeRequestId = null
-                    activeRequestPriority = null
-                    result.fold(
-                        onSuccess = {
-                            lastGenerationCappedByMaxTokens = it.cappedByMaxTokens
-                            state = LocalSessionState.Ready(modelId)
-                            it
-                        },
-                        onFailure = { err ->
-                            Log.e(TAG, "Local generation failed requestId=$reqId", err)
-                            lastGenerationCappedByMaxTokens = false
-                            state = LocalSessionState.Error(err.message ?: "Local generation failed")
-                            throw err
-                        },
-                    )
+                withContext(NonCancellable) {
+                    mutex.withLock {
+                        activeRequestId = null
+                        activeRequestPriority = null
+                        result.fold(
+                            onSuccess = {
+                                lastGenerationCappedByMaxTokens = it.cappedByMaxTokens
+                                state = LocalSessionState.Ready(modelId)
+                                it
+                            },
+                            onFailure = { err ->
+                                Log.e(TAG, "Local generation failed requestId=$reqId", err)
+                                lastGenerationCappedByMaxTokens = false
+                                state = LocalSessionState.Error(err.message ?: "Local generation failed")
+                                throw err
+                            },
+                        )
+                    }
                 }
             }
         } finally {
             if (requestPriority == LocalModelRequestPriority.HIGH && !highPendingConsumed) {
-                mutex.withLock {
-                    pendingHighPriorityRequests = (pendingHighPriorityRequests - 1).coerceAtLeast(0)
+                withContext(NonCancellable) {
+                    mutex.withLock {
+                        pendingHighPriorityRequests = (pendingHighPriorityRequests - 1).coerceAtLeast(0)
+                    }
                 }
             }
         }
@@ -398,13 +421,13 @@ object LocalChatSessionManager {
     }
 
     suspend fun cancelActiveGeneration() {
-        val llm = mutex.withLock { engine } ?: return
+        val llm = mutex.withLock { engine.takeIf { activeRequestId != null } } ?: return
         Log.i(TAG, "Cancelling active local generation")
         runCatching { llm.cancelGeneration() }
     }
 
     suspend fun unload() {
-        mutex.withLock {
+        generationMutex.withLock { mutex.withLock {
             Log.i(TAG, "Unloading local chat session modelId=${loadedModelId.orEmpty()}")
             runCatching { engine?.unloadModel() }
             loadedModelId = null
@@ -415,7 +438,7 @@ object LocalChatSessionManager {
             gpuFallbackMessage = null
             activeRequestId = null
             state = LocalSessionState.ModelNotLoaded
-        }
+        } }
     }
 
     suspend fun runWarmupProbe(
@@ -504,6 +527,7 @@ object LocalChatSessionManager {
 
     private fun isEngineCompatibleWithRuntime(runtime: LocalModelRuntime): Boolean {
         val currentEngine = engine ?: return false
+        if (!currentEngine.isModelLoaded()) return false
         return when (runtime) {
             LocalModelRuntime.LLAMA_CPP -> currentEngine is LlamaCppLocalInferenceEngine
             LocalModelRuntime.LITERT -> currentEngine is LiteRtLocalInferenceEngine

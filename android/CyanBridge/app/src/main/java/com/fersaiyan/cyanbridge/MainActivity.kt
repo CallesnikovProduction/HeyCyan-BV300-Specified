@@ -2425,7 +2425,7 @@ class MainActivity : AppCompatActivity(), TextToSpeech.OnInitListener {
                     addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 })
             }
-            AppDestination.MEDIA -> startActivity(Intent(this, RecordingsListActivity::class.java).apply {
+            AppDestination.MEDIA -> startActivity(Intent(this, com.fersaiyan.cyanbridge.ui.media.Bv300MediaActivity::class.java).apply {
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             })
             AppDestination.PLUGINS -> startActivity(Intent(this, CommunityPluginsActivity::class.java).apply {

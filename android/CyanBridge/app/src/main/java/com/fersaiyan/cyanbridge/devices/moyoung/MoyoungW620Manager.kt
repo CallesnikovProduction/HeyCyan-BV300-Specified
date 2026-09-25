@@ -2,6 +2,7 @@ package com.fersaiyan.cyanbridge.devices.moyoung
 
 import android.content.Context
 import android.util.Log
+import com.fersaiyan.cyanbridge.BuildConfig
 import com.fersaiyan.cyanbridge.localai.audio.VoiceActivityDetector
 import com.fersaiyan.cyanbridge.localai.model.FreshPhotoGuard
 import com.fersaiyan.cyanbridge.localai.bv300TurnOwnership
@@ -96,6 +97,7 @@ class MoyoungW620Manager private constructor(context: Context) {
     private val photoMutex = Mutex()
     private val wifiStateEvents = MutableSharedFlow<WifiStateEvent>(extraBufferCapacity = 8)
     private val wifiConnectionEvents = MutableSharedFlow<Boolean>(extraBufferCapacity = 8)
+    @Volatile private var pendingMediaBaseUrl: CompletableDeferred<String>? = null
     private val _aiDialogueAudio = MutableSharedFlow<MoyoungAiDialogueAudio>(extraBufferCapacity = 2)
     private val _aiDialogueStarted = MutableSharedFlow<MoyoungAiDialogueStart>(extraBufferCapacity = 2)
     private val _state = MutableStateFlow(MoyoungW620State())
@@ -255,6 +257,57 @@ class MoyoungW620Manager private constructor(context: Context) {
         runCatching { connection?.disableWifi() }
     }
 
+    /** Reuses the SDK's FILE Wi-Fi handshake without starting its download-everything callback. */
+    suspend fun <T> withMediaCatalogConnection(
+        wifiCredentials: MoyoungWifiCredentials,
+        block: suspend (baseUrl: String) -> T,
+    ): T = mediaMutex.withLock {
+        val activeConnection = connectedOrNull()
+            ?: throw IOException("Connect BV300 before opening its media library")
+        val baseUrl = CompletableDeferred<String>()
+        pendingMediaBaseUrl = baseUrl
+        try {
+            coroutineScope {
+                val wifiReady = async(start = CoroutineStart.UNDISPATCHED) {
+                    withTimeout(WIFI_READY_TIMEOUT_MS) {
+                        wifiStateEvents.filter {
+                            it.type == CRPWifiType.FILE && it.state == CRPWifiChangeListener.STATE_SUCCESS
+                        }.first()
+                    }
+                }
+                activeConnection.enableWifi(CRPWifiType.FILE, wifiCredentials.ssid, wifiCredentials.password)
+                wifiReady.await()
+                delay(5_000L)
+                val connected = async(start = CoroutineStart.UNDISPATCHED) {
+                    withTimeout(WIFI_CONNECTION_TIMEOUT_MS) { wifiConnectionEvents.filter { it }.first() }
+                }
+                activeConnection.connectWifi()
+                connected.await()
+            }
+            val reportedBaseUrl = withTimeout(WIFI_CONNECTION_TIMEOUT_MS) {
+                while (true) {
+                    val sdkUrl = sdkMediaBaseUrl()
+                    if (sdkUrl != null) return@withTimeout sdkUrl
+                    val callbackUrl = withTimeoutOrNull(500L) { baseUrl.await() }
+                    if (callbackUrl != null) return@withTimeout callbackUrl
+                }
+                @Suppress("UNREACHABLE_CODE")
+                error("BV300 did not report a media URL")
+            }
+            block(reportedBaseUrl)
+        } finally {
+            if (pendingMediaBaseUrl === baseUrl) pendingMediaBaseUrl = null
+            runCatching { activeConnection.disableWifi() }
+        }
+    }
+
+    /** Pinned MoYoung 0.0.7 SDK: its own media.config and file downloads use this URL provider. */
+    private fun sdkMediaBaseUrl(): String? = runCatching {
+        val providerClass = Class.forName("com.moyoung.x.e")
+        val provider = providerClass.getMethod("c").invoke(null)
+        providerClass.getMethod("a").invoke(provider) as? String
+    }.getOrNull()?.takeIf { it.startsWith("http://", true) || it.startsWith("https://", true) }
+
     suspend fun downloadMedia(
         targetDirectory: File,
         wifiCredentials: MoyoungWifiCredentials,
@@ -390,11 +443,13 @@ class MoyoungW620Manager private constructor(context: Context) {
                     runCatching { activeConnection.exitAIDialogue() }
                         .onFailure { Log.w(TAG, "Could not auto-end AI dialogue", it) }
                 }
-                if (snapshot.first == 1L || snapshot.first % 100L == 0L) {
-                    Log.i(
+                if (BuildConfig.DEBUG && (snapshot.first == 1L || snapshot.first % 100L == 0L)) {
+                    Log.d(
                         TAG,
                         "AI dialogue audio frames=${snapshot.first} bytes=${snapshot.second} " +
-                            "lastFrame=${audio.size}",
+                            "lastFrame=${audio.size} rms=${aiVoiceActivityDetector.currentRms.toInt()} " +
+                            "noiseFloor=${aiVoiceActivityDetector.noiseFloor.toInt()} " +
+                            "speech=${aiVoiceActivityDetector.speechDetected}",
                     )
                 }
             }
@@ -428,13 +483,16 @@ class MoyoungW620Manager private constructor(context: Context) {
                     dialogueRequestId = null
                     Triple(requestId, audio, startedAt)
                 }
-                Log.i(
+                if (BuildConfig.DEBUG) Log.d(
                     TAG,
-                    "AI dialogue stopped cancelled=$cancelled frames=$aiDialogueAudioFrames " +
-                        "bytes=$aiDialogueAudioBytes",
+                    "AI dialogue stopped cancelled=$cancelled reason=${aiVoiceActivityDetector.endpointReason} " +
+                        "durationMs=${aiVoiceActivityDetector.durationMs} frames=$aiDialogueAudioFrames " +
+                        "bytes=$aiDialogueAudioBytes speech=${aiVoiceActivityDetector.speechDetected}",
                 )
                 // The glasses also use AudioCancel for their 30-second capture timeout. The
                 // decoded PCM received before that signal is still a valid user utterance.
+                // Still let Vosk examine low-level audio: a softly spoken utterance can be
+                // below the PCM gate, while Vosk may recover its words from the full buffer.
                 if (completed.first != null && completed.second.isNotEmpty()) {
                     _aiDialogueAudio.tryEmit(
                         MoyoungAiDialogueAudio(
@@ -475,6 +533,11 @@ class MoyoungW620Manager private constructor(context: Context) {
 
             override fun onLiveUrlChanged(url: String?) {
                 Log.d(TAG, "SDK media/live base URL=${url.orEmpty()}")
+                if (url?.startsWith("http://", ignoreCase = true) == true ||
+                    url?.startsWith("https://", ignoreCase = true) == true
+                ) {
+                    pendingMediaBaseUrl?.complete(url)
+                }
             }
         })
     }

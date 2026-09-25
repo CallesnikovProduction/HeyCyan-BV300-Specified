@@ -17,6 +17,8 @@ import androidx.core.content.ContextCompat
 import com.fersaiyan.cyanbridge.MainActivity
 import com.fersaiyan.cyanbridge.R
 import com.fersaiyan.cyanbridge.agent.LocalAgentPrefs
+import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
+import com.fersaiyan.cyanbridge.localai.memory.ConversationContextPolicy
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelPreloadPolicy
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
@@ -107,7 +109,12 @@ class AiQuestionForegroundService : Service() {
         modelPreloadJob = serviceScope.launch {
             val startedAt = System.currentTimeMillis()
             runCatching {
-                LocalModelsProvider().prepareSelectedModel(this@AiQuestionForegroundService)
+                LocalModelsProvider().prepareSelectedModel(
+                    this@AiQuestionForegroundService,
+                    contextSizeOverride = if (DeviceProfileStore.isMoyoungW620Selected(this@AiQuestionForegroundService)) {
+                        ConversationContextPolicy.ENGINE_TOKENS
+                    } else null,
+                )
             }.onSuccess { details ->
                 if (details != null) {
                     Log.i(
@@ -148,7 +155,10 @@ class AiQuestionForegroundService : Service() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or
-                        if (isQueryActive) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
+                        // BV300 supplies audio over BLE; this service does not open the phone microphone.
+                        if (isQueryActive && !DeviceProfileStore.isMoyoungW620Selected(this)) {
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                        } else 0
                 } else {
                     0
                 },

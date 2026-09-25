@@ -65,12 +65,20 @@ object VisualIntentRouter : VisualIntentDecision {
     private val colloquialLookQuestion = Regex(
         "(?:^| )(?:посмотри ка че скажешь|глянь че|глянь ч[её]|глянь что это)(?= |$)",
     )
+    private val conversationRecall = Regex(
+        "(?:^| )(?:по моим (?:предыдущим )?словам|что я (?:ранее |раньше )?(?:говорил|сказал)|" +
+            "о которой я (?:говорил|сказал)|в предыдущем сообщении|из (?:нашей )?беседы|" +
+            "как я (?:говорил|сказал)|according to what i said|what did i (?:say|tell you)|" +
+            "in (?:our|the) (?:previous )?conversation)(?= |$)",
+    )
 
     override fun requiresVision(transcript: String): Boolean {
         val text = normalize(transcript)
         if (text.isEmpty()) return false
 
         if (captureAction.containsMatchIn(text) || cameraOperation.containsMatchIn(text)) return true
+        // A question about a fact already stated by the user is not a request to inspect the scene.
+        if (conversationRecall.containsMatchIn(text)) return false
         if (sceneQuestion.containsMatchIn(text) || colloquialLookQuestion.containsMatchIn(text)) return true
 
         val hasPerception = perceptionAction.containsMatchIn(text)

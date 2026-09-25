@@ -127,6 +127,7 @@ fun LocalModelsConfigureScreen(
                     SupportingText(state.selectedModelStatus)
                     SupportingText(state.voskStatus)
                     SupportingText(state.supertonicStatus)
+                    SupportingText(state.embeddingGemmaStatus)
                     if (state.installedModels.isNotEmpty()) {
                         ChoiceField(
                             label = "Selected model",
@@ -162,6 +163,12 @@ fun LocalModelsConfigureScreen(
                         onPrimary = { onAction(LocalModelsAction.ImportSupertonic) },
                         secondaryLabel = "Refresh",
                         onSecondary = { onAction(LocalModelsAction.Refresh) },
+                    )
+                    ActionRow(
+                        primaryLabel = "Import EmbeddingGemma (.tflite)",
+                        onPrimary = { onAction(LocalModelsAction.ImportEmbeddingGemma) },
+                        secondaryLabel = "Import SentencePiece",
+                        onSecondary = { onAction(LocalModelsAction.ImportEmbeddingTokenizer) },
                     )
                     if (state.supertonicStatus.contains("ready")) {
                         ActionRow(

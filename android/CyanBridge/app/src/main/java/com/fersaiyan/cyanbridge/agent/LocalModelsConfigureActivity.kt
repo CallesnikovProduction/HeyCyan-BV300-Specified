@@ -27,6 +27,7 @@ import androidx.lifecycle.lifecycleScope
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogEntry
 import com.fersaiyan.cyanbridge.localai.model.LocalModelManager
 import com.fersaiyan.cyanbridge.localai.SupertonicTts
+import com.fersaiyan.cyanbridge.localai.embedding.EmbeddingGemmaFiles
 import com.fersaiyan.cyanbridge.devices.DeviceProfileStore
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
 import com.fersaiyan.cyanbridge.localmodels.device.DeviceCapabilityService
@@ -105,6 +106,13 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
         if (uri != null) importSupertonic(uri)
     }
 
+    private val importEmbeddingModelLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) importEmbeddingAsset(uri, model = true)
+    }
+    private val importEmbeddingTokenizerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) importEmbeddingAsset(uri, model = false)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val appearancePreferences = AppearancePreferences(this)
@@ -152,6 +160,8 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
             LocalModelsAction.ImportModel -> importModelLauncher.launch(arrayOf("application/octet-stream", "*/*"))
             LocalModelsAction.ImportVosk -> importVoskLauncher.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
             LocalModelsAction.ImportSupertonic -> importSupertonicLauncher.launch(arrayOf("application/x-bzip2", "application/octet-stream", "*/*"))
+            LocalModelsAction.ImportEmbeddingGemma -> importEmbeddingModelLauncher.launch(arrayOf("application/octet-stream", "*/*"))
+            LocalModelsAction.ImportEmbeddingTokenizer -> importEmbeddingTokenizerLauncher.launch(arrayOf("application/octet-stream", "*/*"))
             LocalModelsAction.TestSupertonic -> testSupertonic()
             LocalModelsAction.TestSupertonicEnglish -> testSupertonic(english = true)
             is LocalModelsAction.SelectInstalledModel -> selectModel(action.id)
@@ -223,6 +233,7 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
             } ?: "No model selected",
             voskStatus = if (LocalModelManager.hasVosk(this)) "Vosk Russian: ready" else "Vosk Russian: missing — import vosk-model-small-ru-0.22.zip",
             supertonicStatus = if (LocalModelManager.hasSupertonic(this)) "Supertonic 3 TTS: ready" else "Supertonic 3 TTS: missing — import the .tar.bz2 from Documents/llms",
+            embeddingGemmaStatus = if (EmbeddingGemmaFiles.isReady(this)) "EmbeddingGemma: ready (model + SentencePiece)" else "EmbeddingGemma: import .tflite and sentencepiece.model from Documents/llms",
             emptyStateMessage = if (installedModels.isEmpty()) {
                 "No local model installed. Gemma 4 E2B is the recommended multimodal starter."
             } else "",
@@ -664,6 +675,24 @@ class LocalModelsConfigureActivity : AppCompatActivity() {
             downloadState = result.fold(
                 onSuccess = { LocalModelDownloadUiState(message = "Supertonic 3 TTS ready") },
                 onFailure = { LocalModelDownloadUiState(message = "Supertonic import failed: ${it.message}") },
+            )
+            refreshComposeState()
+        }
+    }
+
+    private fun importEmbeddingAsset(uri: Uri, model: Boolean) {
+        lifecycleScope.launch {
+            downloadState = LocalModelDownloadUiState(isInFlight = true, message = "Importing EmbeddingGemma ${if (model) "model" else "tokenizer"}…")
+            refreshComposeState()
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (model) EmbeddingGemmaFiles.importModel(this@LocalModelsConfigureActivity, uri)
+                    else EmbeddingGemmaFiles.importTokenizer(this@LocalModelsConfigureActivity, uri)
+                }
+            }
+            downloadState = result.fold(
+                onSuccess = { LocalModelDownloadUiState(message = "Imported ${it.name}. Add both files to enable BV300 semantic memory.") },
+                onFailure = { LocalModelDownloadUiState(message = "EmbeddingGemma import failed: ${it.message}") },
             )
             refreshComposeState()
         }

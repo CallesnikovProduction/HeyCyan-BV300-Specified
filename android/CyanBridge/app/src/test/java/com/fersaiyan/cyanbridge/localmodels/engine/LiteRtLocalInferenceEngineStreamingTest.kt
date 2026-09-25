@@ -2,6 +2,8 @@ package com.fersaiyan.cyanbridge.localmodels.engine
 
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,5 +38,12 @@ class LiteRtLocalInferenceEngineStreamingTest {
     @Test
     fun overlappingFragmentsDoNotRepeatSharedText() {
         assertEquals(" ahead", engine.incrementalDelta("Door is", "is ahead"))
+    }
+
+    @Test
+    fun cancelledConversationCannotReusePartialKvState() {
+        assertFalse(engine.conversationMustCloseAfterTurn("bv300-chat:1", false))
+        assertTrue(engine.conversationMustCloseAfterTurn("bv300-chat:1", true))
+        assertTrue(engine.conversationMustCloseAfterTurn(null, false))
     }
 }

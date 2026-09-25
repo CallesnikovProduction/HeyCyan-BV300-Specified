@@ -1,11 +1,17 @@
 package com.fersaiyan.cyanbridge.localai
 
 import android.content.Context
+import android.util.Log
 import com.fersaiyan.cyanbridge.chat.ChatStore
 import com.fersaiyan.cyanbridge.devices.moyoung.MoyoungW620Manager
 import com.fersaiyan.cyanbridge.localai.model.LocalModelManager
 import com.fersaiyan.cyanbridge.localai.model.FreshPhotoGuard
 import com.fersaiyan.cyanbridge.localai.model.GemmaArtifact
+import com.fersaiyan.cyanbridge.localai.memory.ConversationCompactor
+import com.fersaiyan.cyanbridge.localai.memory.ConversationContextCoordinator
+import com.fersaiyan.cyanbridge.localai.memory.ConversationContextPolicy
+import com.fersaiyan.cyanbridge.localai.memory.ContextCapacityFailure
+import com.fersaiyan.cyanbridge.localai.memory.SemanticConversationMemory
 import com.fersaiyan.cyanbridge.localai.stt.RussianSpeechRecognizer
 import com.fersaiyan.cyanbridge.localmodels.provider.LocalModelsProvider
 import com.fersaiyan.cyanbridge.localmodels.remote.RemoteOpenAiPrefs
@@ -30,6 +36,9 @@ class LocalAiOrchestrator(
     private val visualIntent: VisualIntentDecision = VisualIntentRouter,
 ) {
     private val provider = LocalModelsProvider()
+    private val conversationContext = ConversationContextCoordinator(context)
+    private val compactor = ConversationCompactor(context, provider)
+    private val semanticMemory = SemanticConversationMemory(context)
 
     internal suspend fun process(
         pcm16: ByteArray,
@@ -47,7 +56,8 @@ class LocalAiOrchestrator(
             check(GemmaArtifact.isVerified(selected)) {
                 "Gemma file is not the verified E2B bundle. Re-download gemma-4-E2B-it.litertlm and import it again."
             }
-            check(LocalModelSettingsRepository.getForModel(context, selected.id).modelRuntime == LocalModelRuntime.LITERT) {
+            val modelSettings = LocalModelSettingsRepository.getForModel(context, selected.id)
+            check(modelSettings.modelRuntime == LocalModelRuntime.LITERT) {
                 "Set Gemma runtime to LiteRT in Local Models."
             }
             updateIfCurrent(requestId) { it.copy(phase = LocalAiPhase.FINALIZING_STT, error = null) }
@@ -69,27 +79,45 @@ class LocalAiOrchestrator(
             ensureCurrent(requestId)
 
             val chatId = assistantChatId()
-            val history = ChatStore.listMessages(chatId).takeLast(10).map { message ->
-                mapOf(
-                    "role" to if (message.role == ChatRole.USER) "user" else "assistant",
-                    "content" to message.content,
-                )
-            }
-            val messages = listOf(
-                mapOf("role" to "system", "content" to Bv300VoicePrompt.SYSTEM),
-            ) + history + mapOf("role" to "user", "content" to Bv300VoicePrompt.userContent(transcript))
-            ensureCurrent(requestId)
-            ChatStore.addMessage(chatId, ChatRole.USER, transcript, imageAttachmentName = image?.name)
-            ensureCurrent(requestId)
             val arithmetic = if (image == null) SimpleSpokenArithmetic.answerIfUnambiguous(transcript) else null
             if (arithmetic != null) {
+                ensureCurrent(requestId)
+                ChatStore.addMessage(chatId, ChatRole.USER, transcript)
                 if (!ownership.publishIfCurrent(requestId) {
                     ChatStore.addMessage(chatId, ChatRole.ASSISTANT, arithmetic)
                 }) throw CancellationException("BV300 request was preempted before publishing its reply")
+                conversationContext.rollover(chatId) // The native conversation did not see this deterministic answer.
                 timings.firstSentence()
                 onSentence(arithmetic)
                 return arithmetic
             }
+            val recentMessageIds = ChatStore.listMessages(chatId).takeLast(12).mapTo(mutableSetOf()) { it.id }
+            val retrieved = try {
+                semanticMemory.retrieve(transcript, recentMessageIds)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w("Bv300LocalAI", "Semantic retrieval unavailable; continuing without older memories", error)
+                emptyList()
+            }
+            val requestContent = Bv300VoicePrompt.userContent(transcript)
+            val budgetSystem = modelSettings.systemPromptOverride + "\n" + Bv300VoicePrompt.SYSTEM
+            val mediaReserve = if (image != null) 1500 else 0
+            // Keep the user's transcript in Room even if compaction or native inference fails.
+            // Exclude it from reconstructed history because it is the current request below.
+            val userMessage = ChatStore.addMessage(chatId, ChatRole.USER, transcript, imageAttachmentName = image?.name)
+            val prepared = conversationContext.prepare(
+                chatId = chatId,
+                system = Bv300VoicePrompt.SYSTEM,
+                budgetSystem = budgetSystem,
+                currentRequest = requestContent,
+                summarize = compactor::compact,
+                retrievedMemories = retrieved,
+                mediaReserve = mediaReserve,
+                excludedMessageIds = setOf(userMessage.id),
+                assertTurnCurrent = { ensureCurrent(requestId) },
+            )
+            ensureCurrent(requestId)
 
             val sentenceChunker = SentenceChunker()
             val streamed = StringBuilder()
@@ -104,6 +132,7 @@ class LocalAiOrchestrator(
                     val id = assistantMessageId
                     if (id == null) {
                         assistantMessageId = ChatStore.addMessage(chatId, ChatRole.ASSISTANT, content).id
+                        conversationContext.markDraft(chatId, checkNotNull(assistantMessageId))
                     } else {
                         check(ChatStore.updateAssistantMessage(chatId, id, content)) { "Assistant draft disappeared" }
                     }
@@ -124,12 +153,40 @@ class LocalAiOrchestrator(
 
             updateIfCurrent(requestId) { it.copy(modelGenerating = true) }
             val modelReply = try {
-                provider.streamChat(
-                    context = context,
-                    messages = messages,
-                    onToken = ::acceptDelta,
-                    imagePaths = image?.let { listOf(it.absolutePath) }.orEmpty(),
-                ).trim()
+                suspend fun generate(messages: List<Map<String, String>>, conversationId: String): String =
+                    provider.streamChat(
+                        context = context,
+                        messages = messages,
+                        onToken = ::acceptDelta,
+                        imagePaths = image?.let { listOf(it.absolutePath) }.orEmpty(),
+                        conversationId = conversationId,
+                        contextSizeOverride = ConversationContextPolicy.ENGINE_TOKENS,
+                        maxTokens = ConversationContextPolicy.OUTPUT_RESERVE,
+                    ).trim()
+                try {
+                    generate(prepared.messages, prepared.conversationId)
+                } catch (error: Exception) {
+                    if (error is CancellationException || streamed.isNotEmpty() ||
+                        !ContextCapacityFailure.isRecoverable(error)) throw error
+                    ensureCurrent(requestId)
+                    Log.w("Bv300LocalAI", "Context capacity failure; compacting and retrying current turn once", error)
+                    val recovered = conversationContext.prepare(
+                        chatId = chatId,
+                        system = Bv300VoicePrompt.SYSTEM,
+                        budgetSystem = budgetSystem,
+                        currentRequest = requestContent,
+                        summarize = compactor::compact,
+                        mediaReserve = mediaReserve,
+                        excludedMessageIds = setOf(userMessage.id),
+                        recovery = true,
+                        assertTurnCurrent = { ensureCurrent(requestId) },
+                    )
+                    ensureCurrent(requestId)
+                    generate(recovered.messages, recovered.conversationId)
+                }
+            } catch (error: Throwable) {
+                conversationContext.markInterrupted(chatId, assistantMessageId)
+                throw error
             } finally {
                 updateIfCurrent(requestId) { it.copy(modelGenerating = false) }
                 timings.generationFinished()
@@ -154,6 +211,14 @@ class LocalAiOrchestrator(
             }
             publishDraft(force = true)
             ensureCurrent(requestId)
+            conversationContext.markCompleted(chatId, assistantMessageId)
+            try {
+                semanticMemory.indexCompletedTurn(chatId, userMessage.id, transcript, reply)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w("Bv300LocalAI", "Semantic indexing unavailable; answer remains valid", error)
+            }
             return reply
         } catch (cancelled: CancellationException) {
             if (ownership.isCurrent(requestId)) {
@@ -180,7 +245,7 @@ class LocalAiOrchestrator(
             ?: error("BV300 disconnected before starting the local assistant")
         val prefs = context.getSharedPreferences("bv300_local_assistant", Context.MODE_PRIVATE)
         prefs.getString("chat_id", null)?.takeIf {
-            prefs.getString("connection_session_id", null) == sessionId && ChatStore.getThread(it) != null
+            ChatStore.getThread(it) != null
         } ?: run {
             val created = ChatStore.createThread("BV300 Local AI · ${java.text.SimpleDateFormat("dd.MM HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}")
             prefs.edit().putString("chat_id", created.id).putString("connection_session_id", sessionId).apply()

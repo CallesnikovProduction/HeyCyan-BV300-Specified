@@ -85,6 +85,13 @@ class VisualIntentRouterTest {
         "Translate hello into Russian.",
         "Why is the sky blue?",
         "Tell me more.",
+        "По моим предыдущим словам, какого цвета книга лежит на столе?",
+        "Что я говорил о книге на столе?",
+        "What did I tell you about the book on my desk?",
+    )
+
+    @Test fun explicitNewPhotoStillWinsOverConversationRecall() = assertVision(
+        "Сфотографируй стол и сравни с тем, что я говорил раньше.",
     )
 
     private fun assertVision(vararg phrases: String) {

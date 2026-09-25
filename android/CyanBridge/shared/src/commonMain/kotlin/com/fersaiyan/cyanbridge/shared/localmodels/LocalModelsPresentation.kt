@@ -7,6 +7,7 @@ data class LocalModelsConfigureUiState(
     val selectedModelStatus: String = "Status: not downloaded",
     val voskStatus: String = "Vosk: missing",
     val supertonicStatus: String = "Supertonic 3: missing",
+    val embeddingGemmaStatus: String = "EmbeddingGemma: missing",
     val emptyStateMessage: String = "",
     val installedModels: List<InstalledModelUiItem> = emptyList(),
     val selectedInstalledModelId: String? = null,
@@ -135,6 +136,8 @@ sealed interface LocalModelsAction {
     data object ImportModel : LocalModelsAction
     data object ImportVosk : LocalModelsAction
     data object ImportSupertonic : LocalModelsAction
+    data object ImportEmbeddingGemma : LocalModelsAction
+    data object ImportEmbeddingTokenizer : LocalModelsAction
     data object TestSupertonic : LocalModelsAction
     data object TestSupertonicEnglish : LocalModelsAction
     data class SelectInstalledModel(val id: String) : LocalModelsAction

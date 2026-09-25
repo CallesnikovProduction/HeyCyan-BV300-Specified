@@ -29,7 +29,13 @@ data class GenerationConfig(
     val structuredJson: Boolean,
     val imagePaths: List<String> = emptyList(),
     val audioPath: String? = null,
+    /** Non-null only for a native multi-turn LiteRT conversation. */
+    val conversationId: String? = null,
+    val systemInstruction: String? = null,
+    val initialMessages: List<ConversationTurn> = emptyList(),
 )
+
+data class ConversationTurn(val role: String, val content: String)
 
 data class GenerationResult(
     val text: String,

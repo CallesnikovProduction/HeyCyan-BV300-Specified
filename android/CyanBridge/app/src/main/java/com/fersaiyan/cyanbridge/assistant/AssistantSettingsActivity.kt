@@ -55,6 +55,8 @@ import com.fersaiyan.cyanbridge.localai.LocalAiPhase
 import com.fersaiyan.cyanbridge.localai.LocalAiRuntime
 import com.fersaiyan.cyanbridge.localai.SupertonicVoicePrefs
 import com.fersaiyan.cyanbridge.localai.model.LocalModelManager
+import com.fersaiyan.cyanbridge.localai.embedding.EmbeddingGemmaFiles
+import com.fersaiyan.cyanbridge.localai.memory.SemanticMemoryRepository
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -79,6 +81,10 @@ class AssistantSettingsActivity : AppCompatActivity() {
     private var modelCatalogStatus by mutableStateOf("")
     private var localVoiceId by mutableStateOf(0)
     private var localVoiceSpeed by mutableStateOf(1.0f)
+    private var semanticMemoryEnabled by mutableStateOf(true)
+    private var semanticMemoryCount by mutableStateOf(0)
+    private var confirmClearSemanticMemory by mutableStateOf(false)
+    private val semanticMemory by lazy { SemanticMemoryRepository(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,11 +97,22 @@ class AssistantSettingsActivity : AppCompatActivity() {
         availableModels = (availableModels + requestsModel + questionsModel + tasksModel).distinct()
         localVoiceId = SupertonicVoicePrefs.speakerId(this)
         localVoiceSpeed = SupertonicVoicePrefs.speed(this)
+        semanticMemoryEnabled = semanticMemory.isEnabled()
+        refreshSemanticMemoryCount()
         val appearancePreferences = AppearancePreferences(this)
         setContent {
             val appearance by rememberAppearanceSettings(appearancePreferences)
             CyanBridgeTheme(appearance) { Screen() }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshSemanticMemoryCount()
+    }
+
+    private fun refreshSemanticMemoryCount() {
+        lifecycleScope.launch { semanticMemoryCount = semanticMemory.count() }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -171,6 +188,35 @@ class AssistantSettingsActivity : AppCompatActivity() {
                             SupertonicVoicePrefs.setSpeed(this@AssistantSettingsActivity, speed)
                         })
                     }
+                }
+
+                Text("Local conversation memory", style = MaterialTheme.typography.titleMedium)
+                Text(if (EmbeddingGemmaFiles.isReady(this@AssistantSettingsActivity))
+                    "EmbeddingGemma is installed. Older relevant discussions can be recalled offline."
+                    else "EmbeddingGemma is missing. Import its .tflite and sentencepiece.model in Local Models; recent conversation and summary still work.")
+                androidx.compose.foundation.layout.Row {
+                    Text("Semantic memory", modifier = Modifier.weight(1f))
+                    Switch(checked = semanticMemoryEnabled, onCheckedChange = { enabled ->
+                        semanticMemoryEnabled = enabled
+                        semanticMemory.setEnabled(enabled)
+                    })
+                }
+                Text("Stored conversation chunks: $semanticMemoryCount")
+                OutlinedButton(onClick = { confirmClearSemanticMemory = true }) { Text("Clear semantic memory") }
+                if (confirmClearSemanticMemory) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { confirmClearSemanticMemory = false },
+                        title = { Text("Clear BV300 semantic memory?") },
+                        text = { Text("This removes saved conversation vectors and their text. Chat messages and the running summary remain.") },
+                        confirmButton = { TextButton(onClick = {
+                            confirmClearSemanticMemory = false
+                            lifecycleScope.launch {
+                                semanticMemory.clear()
+                                refreshSemanticMemoryCount()
+                            }
+                        }) { Text("Clear") } },
+                        dismissButton = { TextButton(onClick = { confirmClearSemanticMemory = false }) { Text("Cancel") } },
+                    )
                 }
 
                 Text("AI model settings", style = MaterialTheme.typography.titleMedium)

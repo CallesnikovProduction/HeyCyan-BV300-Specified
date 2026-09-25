@@ -14,6 +14,11 @@ class Bv300VoicePromptTest {
         assertFalse(Bv300VoicePrompt.SYSTEM.contains("всегда описывай"))
         assertFalse(Bv300VoicePrompt.SYSTEM.contains("описывай то, что видит пользователь"))
         assertFalse(Bv300VoicePrompt.SYSTEM.contains("одним предложением"))
+        assertTrue(Bv300VoicePrompt.SYSTEM.contains("Не сокращай ответ искусственно"))
+        assertTrue(Bv300VoicePrompt.SYSTEM.contains("простой вопрос требует простого ответа"))
+        assertTrue(Bv300VoicePrompt.SYSTEM.contains("отвечай по истории беседы"))
+        assertTrue(Bv300VoicePrompt.SYSTEM.contains("предпочитай более позднее сообщение пользователя"))
+        assertTrue(Bv300VoicePrompt.SYSTEM.contains("о котором пользователь ничего не сообщил"))
     }
 
     @Test fun imageDoesNotRewriteOrAugmentRecognizedUserText() {

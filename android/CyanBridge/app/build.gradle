@@ -168,6 +168,12 @@ dependencies {
 
     // LiteRT-LM local multimodal/chat runtime.
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.0")
+    // EmbeddingGemma uses its separate SentencePiece tokenizer through the local RAG embedder.
+    implementation("com.google.ai.edge.localagents:localagents-rag:0.1.0") {
+        // Annotation processor accidentally published as a runtime dependency; its Java 9
+        // MethodHandle bytecode cannot be dexed for this app's minSdk 24.
+        exclude group: "com.google.auto.value", module: "auto-value"
+    }
     implementation("com.alphacephei:vosk-android:0.3.47")
 
     // Walking Aid uses the Interpreter API retained by LiteRT. These artifacts package

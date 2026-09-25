@@ -37,6 +37,9 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     private val mutex = Mutex()
     private var engine: Engine? = null
     private var activeConversation: Conversation? = null
+    private var cancelRequested = false
+    private var activeConversationId: String? = null
+    private var activeConversationSystem: String? = null
     private var modelPath: String? = null
     private var activeLoadConfig: EngineLoadConfig? = null
     private var activeLoadResult: EngineLoadResult? = null
@@ -48,45 +51,46 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             "loadModel path=$modelPath backend=${effectiveConfig.computeBackend} cpuThreads=${effectiveConfig.cpuThreads} " +
                 "context=${effectiveConfig.contextSize} gpuLayers=${effectiveConfig.gpuLayers} mtp=${effectiveConfig.speculativeDecoding}",
         )
-        mutex.withLock {
+        return mutex.withLock {
             if (
                 this.modelPath == modelPath &&
                 engine != null &&
                 activeLoadConfig == effectiveConfig
             ) {
                 Log.i(TAG, "Reusing existing LiteRT engine for $modelPath")
-                return activeLoadResult ?: EngineLoadResult(
+                return@withLock activeLoadResult ?: EngineLoadResult(
                     activeBackend = effectiveConfig.computeBackend,
                     activeGpuLayers = 0,
                     speculativeDecodingEnabled = effectiveConfig.speculativeDecoding,
                 )
             }
-        }
-
-        val loadOutcome = withContext(Dispatchers.IO) {
-            when (effectiveConfig.computeBackend) {
-                LocalComputeBackend.GPU -> initializeGpuWithFallback(modelPath, effectiveConfig)
-                LocalComputeBackend.NPU_EXPERIMENTAL -> initializeNpuWithFallback(modelPath, effectiveConfig)
-                LocalComputeBackend.CPU -> {
-                    createInitializedEngine(
-                        modelPath = modelPath,
-                        backend = Backend.CPU(effectiveConfig.cpuThreads),
-                        visionBackend = Backend.CPU(effectiveConfig.cpuThreads),
-                        audioBackend = Backend.CPU(effectiveConfig.cpuThreads),
-                        maxNumTokens = effectiveConfig.contextSize,
-                        speculativeDecoding = effectiveConfig.speculativeDecoding,
-                    ) to EngineLoadResult(
-                        activeBackend = LocalComputeBackend.CPU,
-                        activeGpuLayers = 0,
-                        speculativeDecodingEnabled = effectiveConfig.speculativeDecoding,
-                    )
-                }
-            }
-        }
-
-        return mutex.withLock {
+            // Releasing the old GPU context after constructing its replacement held two
+            // native engines at once and crashed inside the vendor OpenCL release path.
             closeConversationLocked()
             closeEngineLocked()
+            this@LiteRtLocalInferenceEngine.modelPath = null
+            activeLoadConfig = null
+            activeLoadResult = null
+            val loadOutcome = withContext(Dispatchers.IO) {
+                when (effectiveConfig.computeBackend) {
+                    LocalComputeBackend.GPU -> initializeGpuWithFallback(modelPath, effectiveConfig)
+                    LocalComputeBackend.NPU_EXPERIMENTAL -> initializeNpuWithFallback(modelPath, effectiveConfig)
+                    LocalComputeBackend.CPU -> {
+                        createInitializedEngine(
+                            modelPath = modelPath,
+                            backend = Backend.CPU(effectiveConfig.cpuThreads),
+                            visionBackend = Backend.CPU(effectiveConfig.cpuThreads),
+                            audioBackend = Backend.CPU(effectiveConfig.cpuThreads),
+                            maxNumTokens = effectiveConfig.contextSize,
+                            speculativeDecoding = effectiveConfig.speculativeDecoding,
+                        ) to EngineLoadResult(
+                            activeBackend = LocalComputeBackend.CPU,
+                            activeGpuLayers = 0,
+                            speculativeDecodingEnabled = effectiveConfig.speculativeDecoding,
+                        )
+                    }
+                }
+            }
             engine = loadOutcome.first
             this@LiteRtLocalInferenceEngine.modelPath = modelPath
             activeLoadConfig = effectiveConfig
@@ -264,12 +268,22 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
         val llm = mutex.withLock {
             engine ?: throw IllegalStateException("LiteRT engine is not initialized")
         }
-        val conversation = withContext(Dispatchers.IO) {
-            llm.createConversation(buildConversationConfig(config))
-        }
-        mutex.withLock {
-            closeConversationLocked()
-            activeConversation = conversation
+        val conversation = mutex.withLock {
+            if (
+                config.conversationId == null ||
+                activeConversationId != config.conversationId ||
+                activeConversationSystem != config.systemInstruction ||
+                activeConversation == null
+            ) {
+                closeConversationLocked()
+                activeConversation = withContext(Dispatchers.IO) {
+                    llm.createConversation(buildConversationConfig(config))
+                }
+                activeConversationId = config.conversationId
+                activeConversationSystem = config.systemInstruction
+            }
+            cancelRequested = false
+            checkNotNull(activeConversation)
         }
         return try {
             val text = withContext(Dispatchers.IO) {
@@ -284,20 +298,33 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             }
             GenerationResult(text = text, tokenCount = tokenizeEstimate(text))
         } catch (t: Throwable) {
+            mutex.withLock {
+                if (activeConversation === conversation) closeConversationLocked()
+            }
             Log.e(TAG, "LiteRT generation failed", t)
             throw t
         } finally {
             mutex.withLock {
-                if (activeConversation === conversation) closeConversationLocked()
+                // cancelProcess may finish the flow normally with a partial model message.
+                // Never reuse that KV state for the next BV300 turn.
+                if (activeConversation === conversation && conversationMustCloseAfterTurn(config.conversationId, cancelRequested)) {
+                    closeConversationLocked()
+                }
             }
         }
     }
 
     override suspend fun cancelGeneration() {
-        val conv = mutex.withLock { activeConversation } ?: return
-        withContext(Dispatchers.IO) {
-            Log.i(TAG, "Cancelling active LiteRT generation")
-            runCatching { conv.cancelProcess() }
+        // Keep the native handle alive until cancelProcess returns. A concurrent generation
+        // failure or model unload otherwise closes Conversation between lookup and JNI call.
+        mutex.withLock {
+            val conv = activeConversation ?: return@withLock
+            if (cancelRequested) return@withLock
+            cancelRequested = true
+            withContext(Dispatchers.IO) {
+                Log.i(TAG, "Cancelling active LiteRT generation")
+                runCatching { conv.cancelProcess() }
+            }
         }
     }
 
@@ -313,11 +340,20 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
             seed = config.seed,
         )
         return ConversationConfig(
-            systemInstruction = Contents.of(""),
-            initialMessages = emptyList<Message>(),
+            systemInstruction = Contents.of(config.systemInstruction.orEmpty()),
+            initialMessages = config.initialMessages.map { turn ->
+                when (turn.role.lowercase(Locale.US)) {
+                    "user" -> Message.user(turn.content)
+                    "assistant", "model" -> Message.model(turn.content)
+                    else -> error("Unsupported conversation role: ${turn.role}")
+                }
+            },
             tools = emptyList<ToolProvider>(),
             samplerConfig = sampler,
             automaticToolCalling = true,
+            maxOutputToken = config.maxTokens.coerceAtMost(
+                (activeLoadConfig?.contextSize ?: 4096).minus(512).coerceAtLeast(1),
+            ),
         )
     }
 
@@ -382,7 +418,13 @@ class LiteRtLocalInferenceEngine(private val context: Context = MyApplication.CO
     private fun closeConversationLocked() {
         runCatching { activeConversation?.close() }
         activeConversation = null
+        cancelRequested = false
+        activeConversationId = null
+        activeConversationSystem = null
     }
+
+    internal fun conversationMustCloseAfterTurn(conversationId: String?, cancellationRequested: Boolean): Boolean =
+        conversationId == null || cancellationRequested
 
     internal fun incrementalDelta(previous: String, current: String): String {
         if (previous.isBlank()) return current

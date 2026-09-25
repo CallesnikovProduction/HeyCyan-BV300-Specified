@@ -3,6 +3,7 @@ package com.fersaiyan.cyanbridge.localmodels.provider
 import android.content.Context
 import com.fersaiyan.cyanbridge.localmodels.catalog.LocalModelCatalogRepository
 import com.fersaiyan.cyanbridge.localmodels.session.LocalChatSessionManager
+import com.fersaiyan.cyanbridge.localmodels.engine.ConversationTurn
 import com.fersaiyan.cyanbridge.localmodels.session.LocalModelLoadDetails
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelSettingsRepository
 import com.fersaiyan.cyanbridge.localmodels.settings.LocalModelRuntime
@@ -92,6 +93,7 @@ class LocalModelsProvider {
     suspend fun prepareSelectedModel(
         context: Context,
         onStatus: ((String) -> Unit)? = null,
+        contextSizeOverride: Int? = null,
     ): LocalModelLoadDetails? {
         return withContext(Dispatchers.IO) {
             if (RemoteOpenAiPrefs.isActive(context)) return@withContext null
@@ -99,7 +101,10 @@ class LocalModelsProvider {
             LocalModelStorageRepository.cleanupMissingModels(context)
             val selected = LocalModelStorageRepository.resolveSelectedModel(context) ?: return@withContext null
             val catalogEntry = LocalModelCatalogRepository.findById(selected.catalogId)
-            val settings = LocalModelSettingsRepository.getForModel(context, selected.id)
+            val savedSettings = LocalModelSettingsRepository.getForModel(context, selected.id)
+            val settings = if (contextSizeOverride != null) {
+                savedSettings.copy(contextSize = contextSizeOverride.coerceIn(1024, 32768))
+            } else savedSettings
             if (settings.modelRuntime == LocalModelRuntime.REMOTE_OPENAI) return@withContext null
 
             onStatus?.invoke("Preparing ${selected.displayName}...")
@@ -121,6 +126,8 @@ class LocalModelsProvider {
         audioPath: String? = null,
         requestPriority: LocalModelRequestPriority = LocalModelRequestPriority.HIGH,
         maxTokens: Int? = null,
+        conversationId: String? = null,
+        contextSizeOverride: Int? = null,
     ): String {
         return withContext(Dispatchers.IO) {
             // Check if remote OpenAI server is enabled.
@@ -143,7 +150,10 @@ class LocalModelsProvider {
                 )
 
             val catalogEntry = LocalModelCatalogRepository.findById(selected.catalogId)
-            val settings = LocalModelSettingsRepository.getForModel(context, selected.id)
+            val savedSettings = LocalModelSettingsRepository.getForModel(context, selected.id)
+            val settings = if (contextSizeOverride != null) {
+                savedSettings.copy(contextSize = contextSizeOverride.coerceIn(1024, 32768))
+            } else savedSettings
             val hasMediaAttachments = imagePaths.isNotEmpty() || !audioPath.isNullOrBlank()
             if (hasMediaAttachments && settings.modelRuntime != LocalModelRuntime.LITERT) {
                 throw IllegalStateException("Media attachments require Local Runtime = LiteRT for the selected model.")
@@ -167,6 +177,20 @@ class LocalModelsProvider {
                     if (role.isBlank() || content.isBlank()) null else PromptMessage(role = role, content = content)
                 }
 
+            val nativeConversationId = conversationId?.takeIf { settings.modelRuntime == LocalModelRuntime.LITERT }
+            val nativeSystemInstruction = if (nativeConversationId != null) {
+                (listOf(systemPrompt) + chatMessages.filter { it.role.equals("system", true) }.map { it.content })
+                    .map(String::trim)
+                    .filter(String::isNotBlank)
+                    .distinct()
+                    .joinToString("\n\n")
+            } else null
+            val nativeHistory = if (nativeConversationId != null) {
+                chatMessages.filter { it.role.equals("user", true) || it.role.equals("assistant", true) }
+                    .dropLast(1)
+                    .map { ConversationTurn(it.role, it.content) }
+            } else emptyList()
+
             // LiteRT accepts one prompt alongside image/audio attachments. Preserve system instructions
             // instead of dropping them when moving from the chat template to the media API.
             val multimodalRequest = if (hasMediaAttachments) {
@@ -175,11 +199,16 @@ class LocalModelsProvider {
                 null
             }
             // Text-only requests use the full template-rendered prompt.
-            val effectivePrompt = multimodalRequest?.prompt ?: PromptTemplateRegistry.renderPrompt(
-                templateId = templateId,
-                systemPrompt = systemPrompt,
-                messages = chatMessages,
-            )
+            val effectivePrompt = if (nativeConversationId != null) {
+                chatMessages.lastOrNull { it.role.equals("user", true) }?.content
+                    ?: error("Native conversation requires a current user message")
+            } else {
+                multimodalRequest?.prompt ?: PromptTemplateRegistry.renderPrompt(
+                    templateId = templateId,
+                    systemPrompt = systemPrompt,
+                    messages = chatMessages,
+                )
+            }
             val effectiveImagePaths = multimodalRequest?.imagePaths ?: imagePaths
 
             onStatus?.invoke("Loading ${selected.displayName}...")
@@ -206,6 +235,9 @@ class LocalModelsProvider {
                 audioPath = audioPath,
                 requestPriority = requestPriority,
                 maxTokensOverride = maxTokens,
+                conversationId = nativeConversationId,
+                systemInstruction = nativeSystemInstruction,
+                initialMessages = nativeHistory,
             )
 
             val firstCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()
@@ -244,6 +276,9 @@ class LocalModelsProvider {
                 audioPath = audioPath,
                 requestPriority = requestPriority,
                 maxTokensOverride = maxTokens,
+                conversationId = nativeConversationId,
+                systemInstruction = nativeSystemInstruction,
+                initialMessages = nativeHistory,
             )
 
             val retryCapped = LocalChatSessionManager.consumeLastGenerationCappedFlag()

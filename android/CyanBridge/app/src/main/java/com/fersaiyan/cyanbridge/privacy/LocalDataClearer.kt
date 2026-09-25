@@ -77,6 +77,14 @@ object LocalDataClearer {
         runCatching { MeetingCapturePrefs.clear(appCtx) }
             .onFailure { errors.add("meeting_capture_prefs_clear_failed: ${it.message}") }
 
+        // Room clear removes the semantic chunks/vectors; remove the separate compaction cursor
+        // and summary too, so "clear all local data" cannot resurrect conversation context.
+        runCatching {
+            appCtx.getSharedPreferences("bv300_conversation_memory", Context.MODE_PRIVATE).edit().clear().commit()
+            appCtx.getSharedPreferences("bv300_semantic_memory", Context.MODE_PRIVATE).edit().clear().commit()
+            appCtx.getSharedPreferences("bv300_local_assistant", Context.MODE_PRIVATE).edit().clear().commit()
+        }.onFailure { errors.add("assistant_memory_prefs_clear_failed: ${it.message}") }
+
         return Result(deletedFiles = deletedFiles, errors = errors)
     }
 
